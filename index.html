@@ -6,7 +6,7 @@
 <title>Risguard — ISO 27001 Consultant Toolkit</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/dist/msal-browser.min.js"></script>
+<script crossorigin="anonymous" src="https://unpkg.com/@azure/msal-browser@2.38.3/dist/msal-browser.min.js"></script>
 <style>
 :root{
   --navy:#0E2841;--blue:#1F55A6;--blue-h:#185099;--blue-light:#E6F1FB;
@@ -322,7 +322,12 @@ function graphGet(url){return acquireToken().then(function(t){return fetch(GRAPH
 function graphPost(url,body){return acquireToken().then(function(t){return fetch(GRAPH+url,{method:'POST',headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json();});});}
 function graphPatch(url,body){return acquireToken().then(function(t){return fetch(GRAPH+url,{method:'PATCH',headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json();});});}
 
-window.addEventListener('load',initMsal);
+window.addEventListener('load',function(){
+  // Always render the app first
+  render();
+  // Then try MSAL
+  initMsal();
+});
 </script>
 <script>
 // ═══════════════════════════════════════════
