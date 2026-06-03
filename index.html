@@ -6,7 +6,7 @@
 <title>Risguard — ISO 27001 Consultant Toolkit</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.28.0/dist/msal-browser.min.js"></script>
 <style>
 :root{
   --navy:#0E2841;--blue:#1F55A6;--blue-h:#185099;--blue-light:#E6F1FB;
@@ -252,7 +252,10 @@ var AUTH={user:null,token:null,ready:false};
 
 function initMsal(){
   try{
-    msalInstance=new msal.PublicClientApplication(MSAL_CONFIG);
+    if(typeof msal==='undefined')throw new Error('MSAL not loaded');
+    var MsalApp=msal.PublicClientApplication||( msal.default&&msal.default.PublicClientApplication);
+    if(!MsalApp)throw new Error('MSAL class not found');
+    msalInstance=new MsalApp(MSAL_CONFIG);
     msalInstance.handleRedirectPromise().then(function(resp){
       if(resp&&resp.account){
         msalInstance.setActiveAccount(resp.account);
@@ -270,7 +273,7 @@ function initMsal(){
   } catch(e){
     console.warn('MSAL unavailable, running local mode');
     AUTH.ready=true;
-    // Already visible, just render badge if possible
+    document.getElementById('login-screen').style.display='none';
     setTimeout(renderUserBadge,200);
   }
 }
