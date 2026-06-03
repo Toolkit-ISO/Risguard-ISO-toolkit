@@ -272,7 +272,7 @@ function initMsal(){
     console.warn('MSAL unavailable, running local mode');
     AUTH.ready=true;
     document.getElementById('login-screen').style.display='none';
-    setTimeout(renderUserBadge,200);
+    setTimeout(function(){render();renderUserBadge();},200);
   }
 }
 
@@ -302,7 +302,7 @@ function showLoginScreen(){
 function hideLoginScreen(){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app-root').style.display='contents';
-  setTimeout(renderUserBadge,200);
+  setTimeout(function(){render();renderUserBadge();},200);
 }
 function renderUserBadge(){
   var el=document.getElementById('user-badge');
