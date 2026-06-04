@@ -1010,7 +1010,7 @@ function render(){
     var modLbl=ST.module==='impl'?'Implementatie':'Internal Audit';
     bc.innerHTML='<button class="bc-link" onclick="goHome()">'+modLbl+'</button><span class="bc-sep">&#8250;</span><span class="bc-cur">'+c.name+'</span>';
     if(ST.module==='impl'){
-      act.innerHTML='<button class="btn" onclick="openModal(\'importDocs\')">&#128193; Map importeren</button><button class="btn btn-primary" onclick="openModal(\'addDoc\',null)">+ Document</button>';
+      act.innerHTML='<button class="btn" onclick="openModal(\'importDocs\')">&#128193; Map importeren vanuit SharePoint</button>';
       con.innerHTML=renderImplDetail();
       if(ST.tab==='docs')attachSearchEvents();
     } else if(ST.module==='audit') {
@@ -1144,17 +1144,51 @@ function buildDocRows(fd,docs){
 
 function renderDomainsTab(c){
   c.domains=c.domains||[];
+  c.inbox=c.inbox||[];
+  // Ensure default domains exist (add missing ones, preserve existing)
   DEFAULT_DOMAINS.forEach(function(name){
     if(!c.domains.some(function(d){return d.name===name;})){
       c.domains.push({name:name,docs:[],controls:(DOMAIN_CTRL_MAP[name]||[]).slice()});
     }
   });
+  // Backfill controls on existing default domains that don't have them yet
   c.domains.forEach(function(dom){
     if(!dom.controls)dom.controls=(DOMAIN_CTRL_MAP[dom.name]||[]).slice();
   });
   saveDB();
+
   var totalDocs=c.domains.reduce(function(a,d){return a+(d.docs||[]).length;},0);
   var h='<div style="margin-top:1rem">';
+
+  // ── INBOX ────────────────────────────────────────────────────────
+  if(c.inbox.length){
+    h+='<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:var(--radius);padding:14px 16px;margin-bottom:1.25rem">';
+    h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
+    h+='<div><div style="font-size:13px;font-weight:600;color:#92400E">&#128228; Inbox — '+c.inbox.length+' document'+(c.inbox.length!==1?'en':'')+' wachten op indeling</div>';
+    h+='<div style="font-size:11px;color:#B45309;margin-top:2px">Sleep documenten naar een domein hieronder, of klik het map-icoon om te verplaatsen.</div></div>';
+    h+='<button onclick="clearInbox()" class="btn btn-sm" style="font-size:11px;color:#DC2626;border-color:#FCA5A5">&#x2715; Inbox leegmaken</button>';
+    h+='</div>';
+    h+='<div style="display:flex;flex-direction:column;gap:6px" id="inbox-list">';
+    c.inbox.forEach(function(doc,ii){
+      h+='<div class="inbox-item" draggable="true" data-inbox-idx="'+ii+'" ondragstart="inboxDragStart(event,'+ii+')" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:white;border:1px solid #FDE68A;border-radius:8px;cursor:grab">';
+      h+='<span style="font-size:16px">&#128196;</span>';
+      h+='<div style="flex:1;min-width:0">';
+      h+='<div style="font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+doc.name+'</div>';
+      if(doc.link)h+='<a href="'+doc.link+'" target="_blank" style="font-size:11px;color:var(--blue)">&#128279; Openen in SharePoint</a>';
+      h+='</div>';
+      h+='<select onchange="moveInboxToDomain('+ii+',this.value)" style="font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-family:DM Sans,sans-serif;max-width:160px">';
+      h+='<option value="">&#128194; Naar domein...</option>';
+      c.domains.forEach(function(dom,di){
+        h+='<option value="'+di+'">'+dom.name+'</option>';
+      });
+      h+='</select>';
+      h+='<button onclick="removeFromInbox('+ii+')" style="background:none;border:none;cursor:pointer;color:#9CA3AF;font-size:13px;padding:2px 4px">&#x2715;</button>';
+      h+='</div>';
+    });
+    h+='</div></div>';
+  }
+
+  // ── DOMAIN TOOLBAR ───────────────────────────────────────────────
   h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">';
   h+='<div style="font-size:13px;color:var(--text-muted)">'+c.domains.length+' domeinen &middot; '+totalDocs+' documenten totaal</div>';
   h+='<button class="btn btn-primary btn-sm" onclick="openModal(\'addDomain\')">+ Domein toevoegen</button>';
@@ -1167,7 +1201,7 @@ function renderDomainsTab(c){
     var con=docs.filter(function(d){return d.status==='concept'||!d.status;}).length;
     var isOpen=ST.openDomains&&ST.openDomains[di];
     var pct=docs.length?Math.round(apr/docs.length*100):0;
-    h+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;box-shadow:var(--sh)">';
+    h+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;box-shadow:var(--sh)" id="domain-'+di+'" ondragover="domainDragOver(event,'+di+')" ondragleave="domainDragLeave(event,'+di+')" ondrop="domainDrop(event,'+di+')">';
     h+='<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;user-select:none" onclick="toggleDomain('+di+')">';
     h+='<span style="font-size:18px">&#128193;</span>';
     h+='<div style="flex:1">';
@@ -1595,11 +1629,16 @@ function renderModal(){
     root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-title">'+(isE?'Document bewerken':'Document toevoegen')+'</div><div class="field"><label>Documentnaam *</label><input id="m-dn" value="'+(d.name||'').replace(/"/g,'&quot;')+'" placeholder="Bijv. Information Security Policy" autofocus /></div><div class="field"><label>Link (optioneel)</label><input id="m-dl" value="'+(d.link||'').replace(/"/g,'&quot;')+'" placeholder="https://sharepoint.com/..." /></div><div class="field-row"><div class="field"><label>Categorie</label><select id="m-dc">'+catOpts+'</select></div><div class="field"><label>Status</label><select id="m-ds">'+stOpts+'</select></div></div><div class="field"><label>ISO 27001 control</label><select id="m-dco">'+ctrlOpts+'</select></div><div class="field-row"><div class="field"><label>Fase</label><select id="m-dp">'+phOpts+'</select></div><div class="field"><label>Datum</label><input type="date" id="m-dd" value="'+(d.date||today())+'" /></div></div><div class="modal-actions"><button class="btn" onclick="closeModal()">Annuleer</button><button class="btn btn-primary" onclick="saveDoc('+(isE?ei:'null')+')">'+( isE?'&#10003; Opslaan':'Toevoegen')+'</button></div></div></div>';
 
   } else if(ST.modal==='importDocs'){
-    var lh='';
-    if(importFiles.length){
-      lh='<div class="imp-list">'+importFiles.map(function(f,i){var m=detectMeta(f.name);var sto=['concept','review','approved'].map(function(s){return'<option value="'+s+'">'+( s==='approved'?'Goedgekeurd':s==='review'?'In review':'Concept')+'</option>';}).join('');return'<div class="imp-item"><span style="flex:1;font-size:13px">'+cleanName(f.name)+'</span><select id="imp-st-'+i+'" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--white);font-family:inherit;margin-right:6px">'+sto+'</select><span class="tag" style="font-size:10px">'+m.cat+'</span></div>';}).join('')+'</div><p style="font-size:12px;color:var(--text-muted);margin-bottom:1rem">'+importFiles.length+' bestand'+(importFiles.length!==1?'en':'')+' herkend. </p>';
-    }
-    root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-title">Map importeren</div><div class="import-zone" id="iz" onclick="document.getElementById(\'fi\').click()" ondragover="event.preventDefault();this.classList.add(\'drag\')" ondragleave="this.classList.remove(\'drag\')" ondrop="handleDrop(event)"><div class="iz-title">&#128193; Klik of sleep bestanden hierheen</div><div class="iz-sub">Selecteer meerdere bestanden (.docx, .xlsx, .pdf, .pptx)</div></div><input type="file" id="fi" multiple webkitdirectory style="display:none" onchange="handleFiles(this)" />'+lh+'<div class="modal-actions"><button class="btn" onclick="closeModal()">Annuleer</button>'+(importFiles.length?'<button class="btn btn-primary" onclick="importAll()">Importeer '+importFiles.length+' document'+(importFiles.length!==1?'en':'')+'</button>':'')+'</div></div></div>';
+    var spErr=ST._spImportError||'';
+    var spLoadHtml=ST._spImportLoading?'<div style="text-align:center;padding:1.5rem;font-size:13px;color:var(--text-muted)">&#8987; Bestanden ophalen uit SharePoint...</div>':'';
+    root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:540px"><div class="modal-title">&#128193; Map importeren vanuit SharePoint</div>'+
+      '<div style="font-size:13px;color:var(--text-muted);margin-bottom:1.25rem">Plak de URL van een SharePoint-map. Alle bestanden worden opgehaald en komen in de inbox van deze klant.</div>'+
+      '<div class="field"><label>SharePoint map-URL</label><input id="sp-url" placeholder="https://risguard.sharepoint.com/sites/KlantX/Gedeelde documenten/ISO" autofocus style="font-size:12px" /></div>'+
+      (spErr?'<div style="color:#DC2626;font-size:12px;margin-bottom:1rem">&#9888; '+spErr+'</div>':'')+
+      spLoadHtml+
+      '<div style="font-size:11px;color:var(--text-muted);margin-bottom:1.25rem">Tip: Ga in SharePoint naar de map en kopieer de URL uit de adresbalk.</div>'+
+      '<div class="modal-actions"><button class="btn" onclick="closeModal()">Annuleer</button><button class="btn btn-primary" onclick="importFromSharePoint()">&#128193; Ophalen</button></div>'+
+    '</div></div>';
 
   } else if(ST.modal==='editClient'){
     var ci=ST.mdata;var ec=clients()[ci]||{};
@@ -1782,8 +1821,61 @@ function saveNewDomain(){
   if(c.domains.some(function(d){return d.name===name.trim();})){
     alert('Een domein met deze naam bestaat al.');return;
   }
-  c.domains.push({name:name.trim(),docs:[]});
+  c.domains.push({name:name.trim(),docs:[],controls:(DOMAIN_CTRL_MAP[name.trim()]||[]).slice()});
   saveDB();closeModal();render();
+}
+
+function moveInboxToDomain(ii,diStr){
+  if(diStr==='')return;
+  var di=parseInt(diStr);
+  var c=clients()[ST.sel];if(!c||!c.inbox)return;
+  var doc=c.inbox[ii];
+  if(!doc)return;
+  c.domains[di].docs=c.domains[di].docs||[];
+  c.domains[di].docs.push({name:doc.name,link:doc.link||'',controls:doc.controls||[],control:doc.control||'',category:doc.category||'',status:doc.status||'concept',date:today(),note:''});
+  c.inbox.splice(ii,1);
+  if(ST.openDomains)ST.openDomains[di]=true;
+  saveDB();render();
+}
+
+function removeFromInbox(ii){
+  var c=clients()[ST.sel];if(!c||!c.inbox)return;
+  if(!confirm('Document "'+c.inbox[ii].name+'" uit inbox verwijderen?'))return;
+  c.inbox.splice(ii,1);
+  saveDB();render();
+}
+
+function clearInbox(){
+  var c=clients()[ST.sel];if(!c)return;
+  if(!confirm('Alle '+( c.inbox||[]).length+' documenten uit de inbox verwijderen?'))return;
+  c.inbox=[];saveDB();render();
+}
+
+// Drag & drop from inbox to domain
+var _dragInboxIdx=null;
+function inboxDragStart(e,ii){
+  _dragInboxIdx=ii;
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain',String(ii));
+}
+function domainDragOver(e,di){
+  if(_dragInboxIdx===null)return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect='move';
+  var el=document.getElementById('domain-'+di);
+  if(el)el.style.border='2px solid var(--blue)';
+}
+function domainDragLeave(e,di){
+  var el=document.getElementById('domain-'+di);
+  if(el)el.style.border='1px solid var(--border)';
+}
+function domainDrop(e,di){
+  e.preventDefault();
+  var el=document.getElementById('domain-'+di);
+  if(el)el.style.border='1px solid var(--border)';
+  if(_dragInboxIdx===null)return;
+  moveInboxToDomain(_dragInboxIdx,String(di));
+  _dragInboxIdx=null;
 }
 
 function saveScopeDoc(ci){
@@ -2136,6 +2228,105 @@ function importAll(){
     c.docs.push({name:cleanName(f.name),link:'',category:m.cat,control:m.ctrl,phase:m.phase,status:st,date:today()});
   });
   importFiles=[];saveDB();closeModal();render();attachSearchEvents();
+}
+
+// ── SHAREPOINT IMPORT ─────────────────────────────────────────────
+function parseSharePointUrl(url){
+  // Extract site + drive path from SharePoint URL
+  // e.g. https://tenant.sharepoint.com/sites/SiteName/Shared Documents/FolderName
+  try{
+    var u=new URL(url);
+    var host=u.hostname; // e.g. risguard.sharepoint.com
+    var parts=u.pathname.split('/');
+    // Find 'sites' index
+    var sitesIdx=parts.indexOf('sites');
+    if(sitesIdx===-1)return null;
+    var siteName=parts[sitesIdx+1];
+    // Everything after the library name is the folder path
+    // Common library names: 'Shared Documents', 'Gedeelde documenten', 'Documents'
+    var libIdx=-1;
+    var libName='';
+    ['Shared%20Documents','Gedeelde%20documenten','Documents','Documenten','Shared Documents','Gedeelde documenten'].forEach(function(lib){
+      var idx=u.pathname.indexOf(lib);
+      if(idx>-1&&libIdx===-1){libIdx=idx;libName=lib;}
+    });
+    var folderPath='';
+    if(libIdx>-1){
+      folderPath=decodeURIComponent(u.pathname.substring(libIdx+libName.length));
+    }
+    return{host:host,siteName:siteName,folderPath:folderPath.replace(/^\/+/,'')};
+  }catch(e){return null;}
+}
+
+function importFromSharePoint(){
+  var url=(document.getElementById('sp-url')||{}).value||'';
+  if(!url.trim()){ST._spImportError='Vul een SharePoint URL in.';renderModal();return;}
+  if(!AUTH.token){ST._spImportError='Niet ingelogd. Log eerst in met Microsoft.';renderModal();return;}
+
+  ST._spImportLoading=true;ST._spImportError='';renderModal();
+
+  var parsed=parseSharePointUrl(url);
+  if(!parsed){
+    ST._spImportLoading=false;ST._spImportError='Ongeldige SharePoint URL. Kopieer de URL direct uit de adresbalk.';renderModal();return;
+  }
+
+  // Get site ID first
+  acquireToken().then(function(token){
+    return fetch('https://graph.microsoft.com/v1.0/sites/'+parsed.host+':/sites/'+parsed.siteName,{
+      headers:{Authorization:'Bearer '+token}
+    }).then(function(r){return r.json();});
+  }).then(function(site){
+    if(!site.id){throw new Error('Site niet gevonden: '+parsed.siteName);}
+    var siteId=site.id;
+    // Get default drive
+    return acquireToken().then(function(token){
+      return fetch('https://graph.microsoft.com/v1.0/sites/'+siteId+'/drive',{
+        headers:{Authorization:'Bearer '+token}
+      }).then(function(r){return r.json();}).then(function(drive){
+        var driveId=drive.id;
+        // Get folder children
+        var path=parsed.folderPath?'/root:/'+parsed.folderPath+':/children':'/root/children';
+        return acquireToken().then(function(token2){
+          return fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+path,{
+            headers:{Authorization:'Bearer '+token2}
+          }).then(function(r){return r.json();});
+        });
+      });
+    });
+  }).then(function(result){
+    ST._spImportLoading=false;
+    if(!result.value||!result.value.length){
+      ST._spImportError='Geen bestanden gevonden in deze map.';renderModal();return;
+    }
+    var c=clients()[ST.sel];if(!c)return;
+    if(!c.inbox)c.inbox=[];
+    var added=0;
+    result.value.forEach(function(item){
+      if(item.folder)return; // skip subfolders
+      var ext=(item.name.match(/\.([^.]+)$/)||['',''])[1].toLowerCase();
+      if(!['docx','doc','xlsx','xls','pdf','pptx','ppt'].includes(ext))return;
+      // Check not already in inbox
+      if(c.inbox.some(function(d){return d.name===item.name;}))return;
+      var m=detectMeta(item.name);
+      c.inbox.push({
+        name:cleanName(item.name),
+        link:item.webUrl||'',
+        category:m.cat||'',
+        control:'',
+        controls:[],
+        status:'concept',
+        date:today(),
+        spId:item.id
+      });
+      added++;
+    });
+    saveDB();closeModal();render();
+    if(added===0)alert('Alle bestanden staan al in de inbox.');
+  }).catch(function(e){
+    ST._spImportLoading=false;
+    ST._spImportError='Fout: '+( e.message||'Kon bestanden niet ophalen. Controleer de URL en je toegangsrechten.');
+    renderModal();
+  });
 }
 
 function savePhaseNote(pi,val){
