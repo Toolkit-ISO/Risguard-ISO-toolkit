@@ -1633,10 +1633,10 @@ function renderModal(){
     var spLoadHtml=ST._spImportLoading?'<div style="text-align:center;padding:1.5rem;font-size:13px;color:var(--text-muted)">&#8987; Bestanden ophalen uit SharePoint...</div>':'';
     root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:540px"><div class="modal-title">&#128193; Map importeren vanuit SharePoint</div>'+
       '<div style="font-size:13px;color:var(--text-muted);margin-bottom:1.25rem">Plak de URL van een SharePoint-map. Alle bestanden worden opgehaald en komen in de inbox van deze klant.</div>'+
-      '<div class="field"><label>SharePoint map-URL</label><input id="sp-url" placeholder="https://risguard.sharepoint.com/sites/KlantX/Gedeelde documenten/ISO" autofocus style="font-size:12px" /></div>'+
+      '<div class="field"><label>SharePoint map-URL</label><input id="sp-url" placeholder="https://risguard.sharepoint.com/:f:/s/Risguard/Ig..." autofocus style="font-size:12px" /></div>'+
       (spErr?'<div style="color:#DC2626;font-size:12px;margin-bottom:1rem">&#9888; '+spErr+'</div>':'')+
       spLoadHtml+
-      '<div style="font-size:11px;color:var(--text-muted);margin-bottom:1.25rem">Tip: Ga in SharePoint naar de map en kopieer de URL uit de adresbalk.</div>'+
+      '<div style="font-size:11px;color:var(--text-muted);margin-bottom:1.25rem">Tip: Plak een sharing link (via &ldquo;Koppeling kopi&euml;ren&rdquo; in SharePoint) of de URL uit de adresbalk.</div>'+
       '<div class="modal-actions"><button class="btn" onclick="closeModal()">Annuleer</button><button class="btn btn-primary" onclick="importFromSharePoint()">&#128193; Ophalen</button></div>'+
     '</div></div>';
 
@@ -2231,19 +2231,26 @@ function importAll(){
 }
 
 // ── SHAREPOINT IMPORT ─────────────────────────────────────────────
+function isSharingLink(url){
+  // SharePoint sharing links bevatten /:f:/ /:w:/ /:u:/ etc. in het pad
+  return /\/:([a-z]):\//.test(url);
+}
+
+function encodeSharingUrl(url){
+  // Graph API vereist: "u!" + base64url(url), zonder trailing "="
+  var b64=btoa(url).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  return 'u!'+b64;
+}
+
 function parseSharePointUrl(url){
-  // Extract site + drive path from SharePoint URL
-  // e.g. https://tenant.sharepoint.com/sites/SiteName/Shared Documents/FolderName
+  // Adresbalk-URL: https://tenant.sharepoint.com/sites/SiteName/Shared Documents/FolderName
   try{
     var u=new URL(url);
-    var host=u.hostname; // e.g. risguard.sharepoint.com
+    var host=u.hostname;
     var parts=u.pathname.split('/');
-    // Find 'sites' index
     var sitesIdx=parts.indexOf('sites');
     if(sitesIdx===-1)return null;
     var siteName=parts[sitesIdx+1];
-    // Everything after the library name is the folder path
-    // Common library names: 'Shared Documents', 'Gedeelde documenten', 'Documents'
     var libIdx=-1;
     var libName='';
     ['Shared%20Documents','Gedeelde%20documenten','Documents','Documenten','Shared Documents','Gedeelde documenten'].forEach(function(lib){
@@ -2265,35 +2272,65 @@ function importFromSharePoint(){
 
   ST._spImportLoading=true;ST._spImportError='';renderModal();
 
-  var parsed=parseSharePointUrl(url);
-  if(!parsed){
-    ST._spImportLoading=false;ST._spImportError='Ongeldige SharePoint URL. Kopieer de URL direct uit de adresbalk.';renderModal();return;
-  }
-
-  // Get site ID first
-  acquireToken().then(function(token){
-    return fetch('https://graph.microsoft.com/v1.0/sites/'+parsed.host+':/sites/'+parsed.siteName,{
-      headers:{Authorization:'Bearer '+token}
-    }).then(function(r){return r.json();});
-  }).then(function(site){
-    if(!site.id){throw new Error('Site niet gevonden: '+parsed.siteName);}
-    var siteId=site.id;
-    // Get default drive
-    return acquireToken().then(function(token){
-      return fetch('https://graph.microsoft.com/v1.0/sites/'+siteId+'/drive',{
+  var p;
+  if(isSharingLink(url)){
+    // Sharing link (/:f:/ etc.) → omzetten via Graph shares endpoint
+    p=acquireToken().then(function(token){
+      var encoded=encodeSharingUrl(url);
+      // Eerst de driveItem ophalen om de map-id en drive-id te krijgen
+      return fetch('https://graph.microsoft.com/v1.0/shares/'+encoded+'/driveItem',{
         headers:{Authorization:'Bearer '+token}
-      }).then(function(r){return r.json();}).then(function(drive){
-        var driveId=drive.id;
-        // Get folder children
-        var path=parsed.folderPath?'/root:/'+parsed.folderPath+':/children':'/root/children';
-        return acquireToken().then(function(token2){
-          return fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+path,{
-            headers:{Authorization:'Bearer '+token2}
-          }).then(function(r){return r.json();});
+      }).then(function(r){
+        if(!r.ok)return r.json().then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'Kan map niet ophalen ('+r.status+')');});
+        return r.json();
+      }).then(function(item){
+        if(!item.id)throw new Error('Geen map gevonden via sharing link.');
+        // Nu children ophalen van deze map
+        var driveId=item.parentReference&&item.parentReference.driveId;
+        var itemId=item.id;
+        if(!driveId)throw new Error('Drive-ID niet gevonden in antwoord.');
+        return acquireToken().then(function(tok2){
+          return fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/items/'+itemId+'/children',{
+            headers:{Authorization:'Bearer '+tok2}
+          }).then(function(r){
+            if(!r.ok)return r.json().then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'Kan bestanden niet ophalen ('+r.status+')');});
+            return r.json();
+          });
         });
       });
     });
-  }).then(function(result){
+  } else {
+    // Adresbalk-URL → bestaande flow
+    var parsed=parseSharePointUrl(url);
+    if(!parsed){
+      ST._spImportLoading=false;
+      ST._spImportError='Ongeldige URL. Plak een SharePoint sharing link (bijv. https://risguard.sharepoint.com/:f:/s/...) of een adresbalk-URL.';
+      renderModal();return;
+    }
+    p=acquireToken().then(function(token){
+      return fetch('https://graph.microsoft.com/v1.0/sites/'+parsed.host+':/sites/'+parsed.siteName,{
+        headers:{Authorization:'Bearer '+token}
+      }).then(function(r){return r.json();});
+    }).then(function(site){
+      if(!site.id){throw new Error('Site niet gevonden: '+parsed.siteName);}
+      var siteId=site.id;
+      return acquireToken().then(function(token){
+        return fetch('https://graph.microsoft.com/v1.0/sites/'+siteId+'/drive',{
+          headers:{Authorization:'Bearer '+token}
+        }).then(function(r){return r.json();}).then(function(drive){
+          var driveId=drive.id;
+          var path=parsed.folderPath?'/root:/'+parsed.folderPath+':/children':'/root/children';
+          return acquireToken().then(function(token2){
+            return fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+path,{
+              headers:{Authorization:'Bearer '+token2}
+            }).then(function(r){return r.json();});
+          });
+        });
+      });
+    });
+  }
+
+  p.then(function(result){
     ST._spImportLoading=false;
     if(!result.value||!result.value.length){
       ST._spImportError='Geen bestanden gevonden in deze map.';renderModal();return;
@@ -2302,10 +2339,9 @@ function importFromSharePoint(){
     if(!c.inbox)c.inbox=[];
     var added=0;
     result.value.forEach(function(item){
-      if(item.folder)return; // skip subfolders
+      if(item.folder)return;
       var ext=(item.name.match(/\.([^.]+)$/)||['',''])[1].toLowerCase();
       if(!['docx','doc','xlsx','xls','pdf','pptx','ppt'].includes(ext))return;
-      // Check not already in inbox
       if(c.inbox.some(function(d){return d.name===item.name;}))return;
       var m=detectMeta(item.name);
       c.inbox.push({
@@ -2324,7 +2360,7 @@ function importFromSharePoint(){
     if(added===0)alert('Alle bestanden staan al in de inbox.');
   }).catch(function(e){
     ST._spImportLoading=false;
-    ST._spImportError='Fout: '+( e.message||'Kon bestanden niet ophalen. Controleer de URL en je toegangsrechten.');
+    ST._spImportError='Fout: '+(e.message||'Kon bestanden niet ophalen. Controleer de URL en toegangsrechten.');
     renderModal();
   });
 }
