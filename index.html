@@ -2231,38 +2231,87 @@ function importAll(){
 }
 
 // ── SHAREPOINT IMPORT ─────────────────────────────────────────────
+// ── SHAREPOINT IMPORT HELPERS ─────────────────────────────────────
 function isSharingLink(url){
-  // SharePoint sharing links bevatten /:f:/ /:w:/ /:u:/ etc. in het pad
   return /\/:([a-z]):\//.test(url);
 }
 
 function encodeSharingUrl(url){
-  // Graph API vereist: "u!" + base64url(url), zonder trailing "="
   var b64=btoa(url).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
   return 'u!'+b64;
 }
 
-function parseSharePointUrl(url){
-  // Adresbalk-URL: https://tenant.sharepoint.com/sites/SiteName/Shared Documents/FolderName
-  try{
-    var u=new URL(url);
-    var host=u.hostname;
-    var parts=u.pathname.split('/');
-    var sitesIdx=parts.indexOf('sites');
-    if(sitesIdx===-1)return null;
-    var siteName=parts[sitesIdx+1];
-    var libIdx=-1;
-    var libName='';
-    ['Shared%20Documents','Gedeelde%20documenten','Documents','Documenten','Shared Documents','Gedeelde documenten'].forEach(function(lib){
-      var idx=u.pathname.indexOf(lib);
-      if(idx>-1&&libIdx===-1){libIdx=idx;libName=lib;}
+// Centrale functie: lost elke URL op naar {driveId, itemId}
+// Werkt voor zowel sharing links als adresbalk-URLs
+function resolveSharePointFolder(url){
+  if(isSharingLink(url)){
+    var encoded=encodeSharingUrl(url);
+    return acquireToken().then(function(token){
+      return fetch('https://graph.microsoft.com/v1.0/shares/'+encoded+'/driveItem',{
+        headers:{Authorization:'Bearer '+token}
+      }).then(function(r){
+        if(!r.ok)return r.json().then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'Kan map niet ophalen ('+r.status+')');});
+        return r.json();
+      }).then(function(item){
+        if(!item.id)throw new Error('Geen item gevonden via sharing link.');
+        var driveId=item.parentReference&&item.parentReference.driveId;
+        if(!driveId)throw new Error('Drive-ID niet gevonden.');
+        // SharePoint geeft soms de AllItems.aspx-paginaweergave terug i.p.v. de map zelf.
+        // In dat geval is de echte map de parent.
+        var isViewPage=item.name&&item.name.toLowerCase().indexOf('.aspx')>-1;
+        var itemId=isViewPage?(item.parentReference&&item.parentReference.id):item.id;
+        if(!itemId)throw new Error('Kan map-ID niet bepalen vanuit sharing link.');
+        return{driveId:driveId,itemId:itemId};
+      });
     });
-    var folderPath='';
-    if(libIdx>-1){
-      folderPath=decodeURIComponent(u.pathname.substring(libIdx+libName.length));
+  } else {
+    // Adresbalk-URL: https://tenant.sharepoint.com/sites/SiteName/Shared Documents/FolderName
+    try{
+      var u=new URL(url);
+      var host=u.hostname;
+      var parts=u.pathname.split('/');
+      var sitesIdx=parts.indexOf('sites');
+      if(sitesIdx===-1)return Promise.reject(new Error('Geen geldig SharePoint-pad gevonden.'));
+      var siteName=parts[sitesIdx+1];
+      var libIdx=-1,libName='';
+      ['Shared%20Documents','Gedeelde%20documenten','Documents','Documenten','Shared Documents','Gedeelde documenten'].forEach(function(lib){
+        var idx=u.pathname.indexOf(lib);
+        if(idx>-1&&libIdx===-1){libIdx=idx;libName=lib;}
+      });
+      var folderPath=libIdx>-1?decodeURIComponent(u.pathname.substring(libIdx+libName.length)).replace(/^\/+/,''):'';
+      return acquireToken().then(function(token){
+        return fetch('https://graph.microsoft.com/v1.0/sites/'+host+':/sites/'+siteName,{
+          headers:{Authorization:'Bearer '+token}
+        }).then(function(r){return r.json();});
+      }).then(function(site){
+        if(!site.id)throw new Error('Site niet gevonden: '+siteName);
+        return acquireToken().then(function(token){
+          return fetch('https://graph.microsoft.com/v1.0/sites/'+site.id+'/drive',{
+            headers:{Authorization:'Bearer '+token}
+          }).then(function(r){return r.json();});
+        }).then(function(drive){
+          return{driveId:drive.id,folderPath:folderPath};
+        });
+      });
+    }catch(e){return Promise.reject(new Error('Ongeldige URL.'));}
+  }
+}
+
+// Centrale functie: haalt children op gegeven {driveId, itemId} of {driveId, folderPath}
+function fetchFolderChildren(ref){
+  return acquireToken().then(function(token){
+    var endpoint;
+    if(ref.itemId){
+      endpoint='https://graph.microsoft.com/v1.0/drives/'+ref.driveId+'/items/'+ref.itemId+'/children';
+    } else {
+      var p=ref.folderPath?'/root:/'+ref.folderPath+':/children':'/root/children';
+      endpoint='https://graph.microsoft.com/v1.0/drives/'+ref.driveId+p;
     }
-    return{host:host,siteName:siteName,folderPath:folderPath.replace(/^\/+/,'')};
-  }catch(e){return null;}
+    return fetch(endpoint,{headers:{Authorization:'Bearer '+token}}).then(function(r){
+      if(!r.ok)return r.json().then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'Kan bestanden niet ophalen ('+r.status+')');});
+      return r.json();
+    });
+  });
 }
 
 function importFromSharePoint(){
@@ -2272,82 +2321,41 @@ function importFromSharePoint(){
 
   ST._spImportLoading=true;ST._spImportError='';renderModal();
 
-  var p;
-  if(isSharingLink(url)){
-    // Sharing link (/:f:/ etc.) → direct via Graph shares/children endpoint
-    p=acquireToken().then(function(token){
-      var encoded=encodeSharingUrl(url);
-      return fetch('https://graph.microsoft.com/v1.0/shares/'+encoded+'/driveItem/children',{
-        headers:{Authorization:'Bearer '+token}
-      }).then(function(r){
-        if(!r.ok)return r.json().then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'Kan bestanden niet ophalen ('+r.status+')');});
-        return r.json();
-      });
-    });
-  } else {
-    // Adresbalk-URL → bestaande flow
-    var parsed=parseSharePointUrl(url);
-    if(!parsed){
+  resolveSharePointFolder(url)
+    .then(fetchFolderChildren)
+    .then(function(result){
       ST._spImportLoading=false;
-      ST._spImportError='Ongeldige URL. Plak een SharePoint sharing link (bijv. https://risguard.sharepoint.com/:f:/s/...) of een adresbalk-URL.';
-      renderModal();return;
-    }
-    p=acquireToken().then(function(token){
-      return fetch('https://graph.microsoft.com/v1.0/sites/'+parsed.host+':/sites/'+parsed.siteName,{
-        headers:{Authorization:'Bearer '+token}
-      }).then(function(r){return r.json();});
-    }).then(function(site){
-      if(!site.id){throw new Error('Site niet gevonden: '+parsed.siteName);}
-      var siteId=site.id;
-      return acquireToken().then(function(token){
-        return fetch('https://graph.microsoft.com/v1.0/sites/'+siteId+'/drive',{
-          headers:{Authorization:'Bearer '+token}
-        }).then(function(r){return r.json();}).then(function(drive){
-          var driveId=drive.id;
-          var path=parsed.folderPath?'/root:/'+parsed.folderPath+':/children':'/root/children';
-          return acquireToken().then(function(token2){
-            return fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+path,{
-              headers:{Authorization:'Bearer '+token2}
-            }).then(function(r){return r.json();});
-          });
+      if(!result.value||!result.value.length){
+        ST._spImportError='Geen bestanden gevonden in deze map.';renderModal();return;
+      }
+      var c=clients()[ST.sel];if(!c)return;
+      if(!c.inbox)c.inbox=[];
+      var added=0;
+      result.value.forEach(function(item){
+        if(item.folder)return;
+        var ext=(item.name.match(/\.([^.]+)$/)||['',''])[1].toLowerCase();
+        if(!['docx','doc','xlsx','xls','pdf','pptx','ppt'].includes(ext))return;
+        if(c.inbox.some(function(d){return d.name===item.name;}))return;
+        var m=detectMeta(item.name);
+        c.inbox.push({
+          name:cleanName(item.name),
+          link:item.webUrl||'',
+          category:m.cat||'',
+          control:'',
+          controls:[],
+          status:'concept',
+          date:today(),
+          spId:item.id
         });
+        added++;
       });
+      saveDB();closeModal();render();
+      if(added===0)alert('Alle bestanden staan al in de inbox.');
+    }).catch(function(e){
+      ST._spImportLoading=false;
+      ST._spImportError='Fout: '+(e.message||'Kon bestanden niet ophalen. Controleer de URL en toegangsrechten.');
+      renderModal();
     });
-  }
-
-  p.then(function(result){
-    ST._spImportLoading=false;
-    if(!result.value||!result.value.length){
-      ST._spImportError='Geen bestanden gevonden in deze map.';renderModal();return;
-    }
-    var c=clients()[ST.sel];if(!c)return;
-    if(!c.inbox)c.inbox=[];
-    var added=0;
-    result.value.forEach(function(item){
-      if(item.folder)return;
-      var ext=(item.name.match(/\.([^.]+)$/)||['',''])[1].toLowerCase();
-      if(!['docx','doc','xlsx','xls','pdf','pptx','ppt'].includes(ext))return;
-      if(c.inbox.some(function(d){return d.name===item.name;}))return;
-      var m=detectMeta(item.name);
-      c.inbox.push({
-        name:cleanName(item.name),
-        link:item.webUrl||'',
-        category:m.cat||'',
-        control:'',
-        controls:[],
-        status:'concept',
-        date:today(),
-        spId:item.id
-      });
-      added++;
-    });
-    saveDB();closeModal();render();
-    if(added===0)alert('Alle bestanden staan al in de inbox.');
-  }).catch(function(e){
-    ST._spImportLoading=false;
-    ST._spImportError='Fout: '+(e.message||'Kon bestanden niet ophalen. Controleer de URL en toegangsrechten.');
-    renderModal();
-  });
 }
 
 function savePhaseNote(pi,val){
