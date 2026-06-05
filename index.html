@@ -2331,14 +2331,21 @@ function importFromSharePoint(){
       var c=clients()[ST.sel];if(!c)return;
       if(!c.inbox)c.inbox=[];
       var added=0;
+      console.log('[SP Import] Gevonden items:', result.value.length, result.value.map(function(i){return i.name;}));
       result.value.forEach(function(item){
         if(item.folder)return;
         var ext=(item.name.match(/\.([^.]+)$/)||['',''])[1].toLowerCase();
-        if(!['docx','doc','xlsx','xls','pdf','pptx','ppt'].includes(ext))return;
-        if(c.inbox.some(function(d){return d.name===item.name;}))return;
+        if(!['docx','doc','xlsx','xls','pdf','pptx','ppt'].includes(ext)){
+          console.log('[SP Import] Gefilterd (extensie):', item.name, ext);return;
+        }
+        var cleaned=cleanName(item.name);
+        // Duplicate-check op zowel originele naam als opgeschoonde naam
+        if(c.inbox.some(function(d){return d.name===cleaned||d.name===item.name||d.spId===item.id;})){
+          console.log('[SP Import] Al in inbox:', item.name);return;
+        }
         var m=detectMeta(item.name);
         c.inbox.push({
-          name:cleanName(item.name),
+          name:cleaned,
           link:item.webUrl||'',
           category:m.cat||'',
           control:'',
@@ -2348,7 +2355,9 @@ function importFromSharePoint(){
           spId:item.id
         });
         added++;
+        console.log('[SP Import] Toegevoegd:', cleaned);
       });
+      console.log('[SP Import] Totaal toegevoegd:', added, '| Inbox grootte:', c.inbox.length);
       saveDB();closeModal();render();
       if(added===0)alert('Alle bestanden staan al in de inbox.');
     }).catch(function(e){
