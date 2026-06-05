@@ -2274,29 +2274,14 @@ function importFromSharePoint(){
 
   var p;
   if(isSharingLink(url)){
-    // Sharing link (/:f:/ etc.) → omzetten via Graph shares endpoint
+    // Sharing link (/:f:/ etc.) → direct via Graph shares/children endpoint
     p=acquireToken().then(function(token){
       var encoded=encodeSharingUrl(url);
-      // Eerst de driveItem ophalen om de map-id en drive-id te krijgen
-      return fetch('https://graph.microsoft.com/v1.0/shares/'+encoded+'/driveItem',{
+      return fetch('https://graph.microsoft.com/v1.0/shares/'+encoded+'/driveItem/children',{
         headers:{Authorization:'Bearer '+token}
       }).then(function(r){
-        if(!r.ok)return r.json().then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'Kan map niet ophalen ('+r.status+')');});
+        if(!r.ok)return r.json().then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'Kan bestanden niet ophalen ('+r.status+')');});
         return r.json();
-      }).then(function(item){
-        if(!item.id)throw new Error('Geen map gevonden via sharing link.');
-        // Nu children ophalen van deze map
-        var driveId=item.parentReference&&item.parentReference.driveId;
-        var itemId=item.id;
-        if(!driveId)throw new Error('Drive-ID niet gevonden in antwoord.');
-        return acquireToken().then(function(tok2){
-          return fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/items/'+itemId+'/children',{
-            headers:{Authorization:'Bearer '+tok2}
-          }).then(function(r){
-            if(!r.ok)return r.json().then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'Kan bestanden niet ophalen ('+r.status+')');});
-            return r.json();
-          });
-        });
       });
     });
   } else {
