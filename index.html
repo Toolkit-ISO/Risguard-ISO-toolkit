@@ -2298,6 +2298,7 @@ function resolveSharePointFolder(url){
 }
 
 // Centrale functie: haalt children op gegeven {driveId, itemId} of {driveId, folderPath}
+// Haalt children op voor één map-ref, geeft {value:[...]} terug
 function fetchFolderChildren(ref){
   return acquireToken().then(function(token){
     var endpoint;
@@ -2314,6 +2315,32 @@ function fetchFolderChildren(ref){
   });
 }
 
+// Recursief alle bestanden ophalen uit map én submappen (max 3 lagen diep)
+function fetchAllFiles(driveId, itemId, depth){
+  depth=depth||0;
+  if(depth>3)return Promise.resolve([]);
+  return acquireToken().then(function(token){
+    return fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/items/'+itemId+'/children',{
+      headers:{Authorization:'Bearer '+token}
+    }).then(function(r){
+      if(!r.ok)return r.json().then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'Fout bij ophalen map ('+r.status+')');});
+      return r.json();
+    });
+  }).then(function(result){
+    var items=result.value||[];
+    var files=items.filter(function(i){return !i.folder;});
+    var subfolders=items.filter(function(i){return !!i.folder;});
+    if(!subfolders.length)return files;
+    // Recursief submappen ophalen
+    return Promise.all(subfolders.map(function(sub){
+      return fetchAllFiles(driveId, sub.id, depth+1);
+    })).then(function(nested){
+      nested.forEach(function(arr){files=files.concat(arr);});
+      return files;
+    });
+  });
+}
+
 function importFromSharePoint(){
   var url=(document.getElementById('sp-url')||{}).value||'';
   if(!url.trim()){ST._spImportError='Vul een SharePoint URL in.';renderModal();return;}
@@ -2322,27 +2349,35 @@ function importFromSharePoint(){
   ST._spImportLoading=true;ST._spImportError='';renderModal();
 
   resolveSharePointFolder(url)
-    .then(fetchFolderChildren)
-    .then(function(result){
+    .then(function(ref){
+      // Altijd recursief: haalt bestanden op uit map én alle submappen
+      var rootId=ref.itemId;
+      if(!rootId){
+        // adresbalk-URL: eerst root-item ophalen via folderPath
+        return acquireToken().then(function(token){
+          var p=ref.folderPath?'/root:/'+ref.folderPath:'/root';
+          return fetch('https://graph.microsoft.com/v1.0/drives/'+ref.driveId+p,{
+            headers:{Authorization:'Bearer '+token}
+          }).then(function(r){return r.json();}).then(function(item){
+            return fetchAllFiles(ref.driveId, item.id, 0);
+          });
+        });
+      }
+      return fetchAllFiles(ref.driveId, rootId, 0);
+    })
+    .then(function(files){
       ST._spImportLoading=false;
-      if(!result.value||!result.value.length){
-        ST._spImportError='Geen bestanden gevonden in deze map.';renderModal();return;
+      if(!files||!files.length){
+        ST._spImportError='Geen bestanden gevonden in deze map of submappen.';renderModal();return;
       }
       var c=clients()[ST.sel];if(!c)return;
       if(!c.inbox)c.inbox=[];
       var added=0;
-      console.log('[SP Import] Gevonden items:', result.value.length, result.value.map(function(i){return i.name;}));
-      result.value.forEach(function(item){
-        if(item.folder)return;
+      files.forEach(function(item){
         var ext=(item.name.match(/\.([^.]+)$/)||['',''])[1].toLowerCase();
-        if(!['docx','doc','xlsx','xls','pdf','pptx','ppt'].includes(ext)){
-          console.log('[SP Import] Gefilterd (extensie):', item.name, ext);return;
-        }
+        if(!['docx','doc','xlsx','xls','pdf','pptx','ppt'].includes(ext))return;
         var cleaned=cleanName(item.name);
-        // Duplicate-check op zowel originele naam als opgeschoonde naam
-        if(c.inbox.some(function(d){return d.name===cleaned||d.name===item.name||d.spId===item.id;})){
-          console.log('[SP Import] Al in inbox:', item.name);return;
-        }
+        if(c.inbox.some(function(d){return d.spId===item.id||d.name===cleaned;}))return;
         var m=detectMeta(item.name);
         c.inbox.push({
           name:cleaned,
@@ -2355,9 +2390,7 @@ function importFromSharePoint(){
           spId:item.id
         });
         added++;
-        console.log('[SP Import] Toegevoegd:', cleaned);
       });
-      console.log('[SP Import] Totaal toegevoegd:', added, '| Inbox grootte:', c.inbox.length);
       saveDB();closeModal();render();
       if(added===0)alert('Alle bestanden staan al in de inbox.');
     }).catch(function(e){
