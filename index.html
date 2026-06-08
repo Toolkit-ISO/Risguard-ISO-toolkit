@@ -252,6 +252,7 @@ tbody tr:hover td{background:#F7FAFD;}
 .na-row td{opacity:.45;}
 .divider{border:none;border-top:1px solid var(--border);margin:1.25rem 0;}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -1515,17 +1516,17 @@ function renderSoaTab(c){
 
   var h='';
 
-  // Dashboard
-  h+='<div class="stats-row" style="margin-bottom:1.25rem">';
-  h+='<div class="stat-card"><div class="stat-val" style="color:var(--blue)" id="soa-dash-applicable">'+ap.length+'</div><div class="stat-lbl">Applicable</div></div>';
-  h+='<div class="stat-card"><div class="stat-val" style="color:#5F5E5A" id="soa-dash-na">'+na.length+'</div><div class="stat-lbl">Niet van toepassing</div></div>';
-  h+='<div class="stat-card"><div class="stat-val" style="color:#0F6E56" id="soa-dash-impl">'+impl.length+'</div><div class="stat-lbl">Implemented</div></div>';
-  h+='<div class="stat-card"><div class="stat-val" style="color:var(--amber)" id="soa-dash-inprog">'+inprog.length+'</div><div class="stat-lbl">In Progress</div></div>';
-  h+='<div class="stat-card"><div class="stat-val" style="color:var(--blue)" id="soa-dash-planned">'+planned.length+'</div><div class="stat-lbl">Planned</div></div>';
+  // Compact status summary
+  h+='<div style="display:flex;align-items:center;gap:16px;margin-bottom:1.25rem;padding:10px 14px;background:var(--white);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--sh)">';
+  h+='<div style="font-size:13px;font-weight:600;color:var(--text)">'+ap.length+' applicable</div>';
+  h+='<div style="font-size:12px;color:#5F5E5A">'+na.length+' uitgesloten</div>';
+  h+='<div style="width:1px;height:18px;background:var(--border)"></div>';
+  h+='<div style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#0F6E56;display:inline-block"></span><span style="font-size:12px;color:#0F6E56">'+impl.length+' Implemented</span></div>';
+  h+='<div style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#B45309;display:inline-block"></span><span style="font-size:12px;color:#B45309">'+inprog.length+' In Progress</span></div>';
+  h+='<div style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#1a6bbd;display:inline-block"></span><span style="font-size:12px;color:#1a6bbd">'+planned.length+' Planned</span></div>';
+  h+='<div style="flex:1;margin-left:8px"><div style="height:6px;background:#F0F0F0;border-radius:3px"><div style="height:6px;background:#0F6E56;border-radius:3px;width:'+pct+'%"></div></div></div>';
+  h+='<div style="font-size:12px;font-weight:600;color:var(--text)">'+pct+'%</div>';
   h+='</div>';
-
-  // Progress bar
-  h+='<div class="prog-hdr" style="margin-bottom:1.5rem"><div class="prog-pct" id="soa-prog-pct">'+pct+'%</div><div class="prog-trk"><div class="prog-lbl" id="soa-prog-lbl">'+impl.length+' van '+ap.length+' applicable controls geimplementeerd ('+pct+'%)</div><div class="prog-bar"><div class="prog-fill" id="soa-prog-fill" style="width:'+pct+'%"></div></div></div></div>';
 
   // Export + legend row
   h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">';
@@ -1649,27 +1650,113 @@ function getImplDocForControl(c, controlId){
 function exportSoaExcel(){
   var c=clients()[ST.sel];if(!c)return;
   var ctrls=getSoaControls(c);
-  var rows=[['Control Ref','Control Name','Applicable','Reason for Applicability','Reason for Exclusion','Implementing Document','Implementation Status']];
+  var today_str=today();
+
+  var CTRL_DESC_EXPORT={'A.5.1':'Policies for information security shall be defined, approved by management, published, communicated and acknowledged by personnel.','A.5.2':'Information security roles and responsibilities shall be defined and allocated.','A.5.3':'Conflicting duties and areas of responsibility shall be segregated.','A.5.4':'Management shall require all personnel to apply information security per established policies.','A.5.5':'The organization shall establish and maintain contact with relevant authorities.','A.5.6':'The organization shall establish and maintain contact with special interest groups.','A.5.7':'Information relating to threats shall be collected and analysed to produce threat intelligence.','A.5.8':'Information security shall be integrated into project management.','A.5.9':'An inventory of information and other associated assets shall be developed and maintained.','A.5.10':'Rules for acceptable use and handling of information assets shall be identified, documented and implemented.','A.5.11':'Personnel shall return all assets upon termination or change of employment.','A.5.12':'Information shall be classified according to security needs of the organization.','A.5.13':'Appropriate procedures for information labelling shall be developed and implemented.','A.5.14':'Information transfer rules and procedures shall be in place for all transfer types.','A.5.15':'Access to information and assets shall be controlled per established policy.','A.5.16':'The full lifecycle of identities shall be managed.','A.5.17':'Allocation and management of authentication information shall be controlled by a management process.','A.5.18':'Access rights shall be provisioned, reviewed, modified and removed per access control policy.','A.5.19':'Processes shall be defined to manage security risks in supplier relationships.','A.5.20':'Relevant security requirements shall be established and agreed with each supplier.','A.5.21':'Processes shall be defined to manage security risks in the ICT supply chain.','A.5.22':'Supplier security practices and service delivery shall be regularly monitored and reviewed.','A.5.23':'Processes for acquisition, use, management and exit from cloud services shall be defined.','A.5.24':'The organization shall plan and prepare for managing information security incidents.','A.5.25':'The organization shall assess information security events and categorize incidents.','A.5.26':'Information security incidents shall be responded to per documented procedures.','A.5.27':'Knowledge from incidents shall be used to strengthen and improve controls.','A.5.28':'Procedures for identification, collection and preservation of evidence shall be established.','A.5.29':'The organization shall plan how to maintain information security during disruption.','A.5.30':'The organization shall plan, implement, maintain, test and review ICT readiness for business continuity.','A.5.31':'Legal, statutory, regulatory and contractual requirements shall be identified and kept up to date.','A.5.32':'Appropriate procedures shall be implemented to protect intellectual property rights.','A.5.33':'Records shall be protected from loss, destruction, falsification and unauthorized access.','A.5.34':'Requirements regarding the preservation of privacy and protection of PII shall be identified and met.','A.5.35':'The approach to managing information security shall be reviewed independently at planned intervals.','A.5.36':'Compliance with information security policies and standards shall be regularly reviewed.','A.5.37':'Operating procedures for information processing facilities shall be documented and made available.','A.6.1':'Background verification checks on all candidates shall be carried out prior to joining.','A.6.2':'Employment contracts shall state personnel\'s and the organization\'s responsibilities for information security.','A.6.3':'Personnel shall receive appropriate security awareness, education and training.','A.6.4':'A disciplinary process shall be formalized to take actions against policy violations.','A.6.5':'Security responsibilities that remain valid after termination shall be defined and enforced.','A.6.6':'Confidentiality or non-disclosure agreements shall be identified, reviewed and signed.','A.6.7':'Security measures shall be implemented when personnel are working remotely.','A.6.8':'A mechanism shall be provided for personnel to report observed or suspected security events.','A.7.1':'Physical security perimeters shall be defined and used to protect areas containing information assets.','A.7.2':'Secure areas shall be protected by appropriate entry controls and access points.','A.7.3':'Physical security for offices, rooms and facilities shall be designed and implemented.','A.7.4':'Premises shall be continuously monitored for unauthorized physical access.','A.7.5':'Protection against physical and environmental threats shall be designed and implemented.','A.7.6':'Security measures for working in secure areas shall be designed and implemented.','A.7.7':'Clear desk rules for papers and clear screen rules for information processing facilities shall be enforced.','A.7.8':'Equipment shall be sited securely and protected.','A.7.9':'Off-premises assets shall be protected.','A.7.10':'Storage media shall be managed through their full lifecycle.','A.7.11':'Information processing facilities shall be protected from power failures and other disruptions.','A.7.12':'Cables carrying power or data shall be protected from interception, interference or damage.','A.7.13':'Equipment shall be maintained correctly to ensure availability, integrity and confidentiality.','A.7.14':'Equipment containing storage media shall be verified to ensure sensitive data is deleted before disposal.','A.8.1':'Information stored, processed or accessible via user endpoint devices shall be protected.','A.8.2':'The allocation and use of privileged access rights shall be restricted and managed.','A.8.3':'Access to information and assets shall be restricted per access control policy.','A.8.4':'Read and write access to source code, development tools and libraries shall be appropriately managed.','A.8.5':'Secure authentication technologies and procedures shall be implemented.','A.8.6':'The use of resources shall be monitored and adjusted in line with capacity requirements.','A.8.7':'Protection against malware shall be implemented and supported by user awareness.','A.8.8':'Information about technical vulnerabilities shall be obtained, evaluated and addressed.','A.8.9':'Configurations, including security configurations, shall be established, documented and monitored.','A.8.10':'Information stored in systems or devices shall be deleted when no longer required.','A.8.11':'Data masking shall be used in accordance with access control and related policies.','A.8.12':'Data leakage prevention measures shall be applied to systems and networks processing sensitive information.','A.8.13':'Backup copies of information and systems shall be maintained and regularly tested.','A.8.14':'Information processing facilities shall be implemented with redundancy sufficient to meet availability requirements.','A.8.15':'Event logs recording user activities, exceptions and faults shall be produced, stored and analysed.','A.8.16':'Networks, systems and applications shall be monitored for anomalous behaviour.','A.8.17':'Clocks of information processing systems shall be synchronised to approved time sources.','A.8.18':'The installation and use of privileged utility programs shall be restricted and controlled.','A.8.19':'Procedures and measures shall be implemented to securely manage software installation on operational systems.','A.8.20':'Networks and network devices shall be secured, managed and controlled.','A.8.21':'Security mechanisms, service levels and requirements of network services shall be identified and implemented.','A.8.22':'Groups of information services, users and systems shall be segregated in the organization\'s networks.','A.8.23':'Access to external websites shall be managed to reduce exposure to malicious content.','A.8.24':'Cryptographic techniques shall be used in accordance with the organization\'s policy.','A.8.25':'Security shall be integrated into the software development lifecycle.','A.8.26':'Application security requirements shall be identified and specified.','A.8.27':'Principles for engineering secure systems shall be established, documented and applied.','A.8.28':'Secure coding principles shall be applied to software development.','A.8.29':'Security testing processes shall be defined and implemented in the development lifecycle.','A.8.30':'The organization shall supervise and monitor outsourced system development activities.','A.8.31':'Development, testing and production environments shall be separated.','A.8.32':'Changes to information systems shall follow a formal management procedure.','A.8.33':'Test information shall be appropriately selected, protected and managed.','A.8.34':'Audit tests and activities shall be planned and agreed to minimise disruptions to business processes.'};
+
+  var SECTION_LABELS={'A.5':'ORGANISATIONAL CONTROLS','A.6':'PEOPLE CONTROLS','A.7':'PHYSICAL CONTROLS','A.8':'TECHNOLOGICAL CONTROLS'};
+  function implLabel(s){return s==='implemented'?'Implemented':s==='in_progress'?'In Progress':s==='planned'?'Planned':s==='na'?'Excluded':'Planned';}
+
+  var XL=window.XLSX;
+  if(!XL){alert('SheetJS niet beschikbaar. Herlaad de pagina.');return;}
+  var wb=XL.utils.book_new();
+
+  // ── Instructions ─────────────────────────────────────────────────
+  var wsInstr=XL.utils.aoa_to_sheet([
+    ['HOW TO USE THIS REGISTER'],
+    ['Generated by Risguard ISO 27001 Toolkit for client: '+c.name],
+    [''],
+    ['1.  The \'Statement of Applicability\' sheet contains all 93 Annex A controls with current toolkit data.'],
+    ['2.  The \'Management Summary\' sheet contains dashboard counters calculated via Excel formulas.'],
+    ['3.  Update \'Approved By\' and \'Effective Date\' in the Document Control sheet before sharing.'],
+    [''],
+    ['Column guide (Statement of Applicability):'],
+    ['  A = Control Ref  |  B = Control Name  |  C = Description  |  D = Applicable (Yes/No)'],
+    ['  E = Implementation Status  |  F-I = Reason (RA/RE/BP/CA)  |  J = Exclusion reason'],
+    ['  K = Implementing Document  |  L = Evidence / Reference  |  M = Document reference']
+  ]);
+  wsInstr['!cols']=[{wch:120}];
+  XL.utils.book_append_sheet(wb,wsInstr,'Instructions');
+
+  // ── Document Control ─────────────────────────────────────────────
+  var wsDC=XL.utils.aoa_to_sheet([
+    ['DOCUMENT CONTROL','','','',''],
+    ['Document Information','','','',''],
+    ['','Document Title','Statement of Applicability (SoA)','',''],
+    ['','ISO 27001 Control(s)','ISO 27001 (Clause 6.1.3d)','',''],
+    ['','Document Classification','Internal','',''],
+    ['','Document Owner','[Name / Role]','',''],
+    ['','Approved By','[Name / Role]','',''],
+    ['','Effective Date','[YYYY-MM-DD]','',''],
+    ['','Next Review Date','[YYYY-MM-DD]','',''],
+    ['','','','',''],
+    ['','Organization',c.name,'',''],
+    ['','Sector',(c.sector||'[Sector]'),'',''],
+    ['','Employees',(c.size||'[Size]'),'',''],
+    ['','','','',''],
+    ['Change Log','','','',''],
+    ['Version','Date','Changed By','Description of Change','Approved By'],
+    ['1.0',today_str,'Risguard Toolkit','Initial export from toolkit','[Name / Role]']
+  ]);
+  wsDC['!cols']=[{wch:20},{wch:25},{wch:40},{wch:30},{wch:20}];
+  XL.utils.book_append_sheet(wb,wsDC,'Document Control');
+
+  // ── Management Summary ────────────────────────────────────────────
+  var S="'Statement of Applicability'";
+  var msData=[
+    ['STATEMENT OF APPLICABILITY \u2014 MANAGEMENT SUMMARY','','','','','','','','','','',''],
+    ['','','','','','','','','','','',''],
+    ['OVERALL COVERAGE','','','','','','IMPLEMENTATION STATUS (APPLICABLE CONTROLS)','','','','',''],
+    ['','','Total','Applicable','Not Applicable','Justification OK','','','Implemented','In Progress','Planned','Excluded'],
+    ['','All controls',93,{f:'COUNTIF('+S+'!D5:D200,"Yes")'},{f:'COUNTIF('+S+'!D5:D200,"No")'},{f:'COUNTIFS('+S+'!D5:D200,"No",'+S+'!J5:J200,"<>"&"")+COUNTIF('+S+'!D5:D200,"Yes")'},'','All applicable',{f:'COUNTIFS('+S+'!D5:D200,"Yes",'+S+'!E5:E200,"Implemented")'},{f:'COUNTIFS('+S+'!D5:D200,"Yes",'+S+'!E5:E200,"In Progress")'},{f:'COUNTIFS('+S+'!D5:D200,"Yes",'+S+'!E5:E200,"Planned")'},{f:'COUNTIFS('+S+'!D5:D200,"No",'+S+'!E5:E200,"Excluded")'}],
+    ['','A.5 Organisational',37,{f:'COUNTIFS('+S+'!A5:A200,"A.5.*",'+S+'!D5:D200,"Yes")'},{f:'COUNTIFS('+S+'!A5:A200,"A.5.*",'+S+'!D5:D200,"No")'},'\u2014','','A.5 Organisational',{f:'COUNTIFS('+S+'!A5:A200,"A.5.*",'+S+'!D5:D200,"Yes",'+S+'!E5:E200,"Implemented")'},{f:'COUNTIFS('+S+'!A5:A200,"A.5.*",'+S+'!D5:D200,"Yes",'+S+'!E5:E200,"In Progress")'},{f:'COUNTIFS('+S+'!A5:A200,"A.5.*",'+S+'!D5:D200,"Yes",'+S+'!E5:E200,"Planned")'},{f:'COUNTIFS('+S+'!A5:A200,"A.5.*",'+S+'!D5:D200,"No",'+S+'!E5:E200,"Excluded")'}],
+    ['','A.6 People',8,{f:'COUNTIFS('+S+'!A5:A200,"A.6.*",'+S+'!D5:D200,"Yes")'},{f:'COUNTIFS('+S+'!A5:A200,"A.6.*",'+S+'!D5:D200,"No")'},'\u2014','','A.6 People',{f:'COUNTIFS('+S+'!A5:A200,"A.6.*",'+S+'!D5:D200,"Yes",'+S+'!E5:E200,"Implemented")'},{f:'COUNTIFS('+S+'!A5:A200,"A.6.*",'+S+'!D5:D200,"Yes",'+S+'!E5:E200,"In Progress")'},{f:'COUNTIFS('+S+'!A5:A200,"A.6.*",'+S+'!D5:D200,"Yes",'+S+'!E5:E200,"Planned")'},{f:'COUNTIFS('+S+'!A5:A200,"A.6.*",'+S+'!D5:D200,"No",'+S+'!E5:E200,"Excluded")'}],
+    ['','A.7 Physical',14,{f:'COUNTIFS('+S+'!A5:A200,"A.7.*",'+S+'!D5:D200,"Yes")'},{f:'COUNTIFS('+S+'!A5:A200,"A.7.*",'+S+'!D5:D200,"No")'},'\u2014','','A.7 Physical',{f:'COUNTIFS('+S+'!A5:A200,"A.7.*",'+S+'!D5:D200,"Yes",'+S+'!E5:E200,"Implemented")'},{f:'COUNTIFS('+S+'!A5:A200,"A.7.*",'+S+'!D5:D200,"Yes",'+S+'!E5:E200,"In Progress")'},{f:'COUNTIFS('+S+'!A5:A200,"A.7.*",'+S+'!D5:D200,"Yes",'+S+'!E5:E200,"Planned")'},{f:'COUNTIFS('+S+'!A5:A200,"A.7.*",'+S+'!D5:D200,"No",'+S+'!E5:E200,"Excluded")'}],
+    ['','A.8 Technological',34,{f:'COUNTIFS('+S+'!A5:A200,"A.8.*",'+S+'!D5:D200,"Yes")'},{f:'COUNTIFS('+S+'!A5:A200,"A.8.*",'+S+'!D5:D200,"No")'},'\u2014','','A.8 Technological',{f:'COUNTIFS('+S+'!A5:A200,"A.8.*",'+S+'!D5:D200,"Yes",'+S+'!E5:E200,"Implemented")'},{f:'COUNTIFS('+S+'!A5:A200,"A.8.*",'+S+'!D5:D200,"Yes",'+S+'!E5:E200,"In Progress")'},{f:'COUNTIFS('+S+'!A5:A200,"A.8.*",'+S+'!D5:D200,"Yes",'+S+'!E5:E200,"Planned")'},{f:'COUNTIFS('+S+'!A5:A200,"A.8.*",'+S+'!D5:D200,"No",'+S+'!E5:E200,"Excluded")'}],
+    ['','','','','','','','','','','',''],
+    ['','','','','','','','','','','',''],
+    ['AUDIT READINESS INDICATORS','','','','','','','','','','',''],
+    ['','All not-applicable controls have a justification','','','','','','','',{f:'IF(COUNTIFS('+S+'!D5:D200,"No",'+S+'!J5:J200,"")=0,CHAR(10057)&" Complete","! "&COUNTIFS('+S+'!D5:D200,"No",'+S+'!J5:J200,"")&" missing justifications")'},'',''],
+    ['','Controls fully implemented vs total applicable','','','','','','','',{f:'COUNTIFS('+S+'!D5:D200,"Yes",'+S+'!E5:E200,"Implemented")&" / "&COUNTIF('+S+'!D5:D200,"Yes")&"  ("&TEXT(IFERROR(COUNTIFS('+S+'!D5:D200,"Yes",'+S+'!E5:E200,"Implemented")/COUNTIF('+S+'!D5:D200,"Yes"),0),"0%")&")"'},'',''],
+    ['','Controls not yet implemented (Applicable but not Implemented)','','','','','','','',{f:'COUNTIFS('+S+'!D5:D200,"Yes",'+S+'!E5:E200,"<>Implemented")&" controls require action"'},'','']
+  ];
+  var wsMS=XL.utils.aoa_to_sheet(msData);
+  wsMS['!cols']=[{wch:4},{wch:22},{wch:8},{wch:10},{wch:14},{wch:16},{wch:4},{wch:22},{wch:12},{wch:40},{wch:10},{wch:10}];
+  XL.utils.book_append_sheet(wb,wsMS,'Management Summary');
+
+  // ── Statement of Applicability ────────────────────────────────────
+  var soaRows=[];
+  soaRows.push(['STATEMENT OF APPLICABILITY  |  ISO 27001:2022  |  '+c.name,'','','','','','','','','','','','']);
+  soaRows.push(['Version: 1.0   |   Date: '+today_str+'   |   Approved by: [Name / Role]   |   Applicable to ISMS scope: '+(c.sector||'[Scope]'),'','','','','','','','','','','','']);
+  soaRows.push(['','','','','','','','','','','','','']);
+  soaRows.push(['Control\nRef','Control Name','Control description','Applicable\n','Implemented\n','Reason for Applicability','','','','Reason for Exclusion','Implementing Document\n(Policy / Procedure / Technical control)','Evidence / Reference','Document reference']);
+  var lastGroup='';
   ctrls.forEach(function(ctrl){
-    var implDoc=getImplDocForControl(c,ctrl.id);
-    rows.push([
-      'A.'+ctrl.id,
-      ctrl.name,
-      ctrl.applicable?'Yes':'No',
-      ctrl.applicable?(ctrl.soaReason||''):'',
-      !ctrl.applicable?(ctrl.soaExclusion||''):'',
-      implDoc||ctrl.doc||'',
-      ctrl.applicable?(ctrl.implStatus==='implemented'?'Implemented':ctrl.implStatus==='in_progress'?'In Progress':'Planned'):'N/A'
+    var grp=ctrl.group;
+    if(grp!==lastGroup){soaRows.push([grp,SECTION_LABELS[grp]||'','','','','RA','RE','BP','CA','','','','']);lastGroup=grp;}
+    var ref='A.'+ctrl.id;
+    var desc=CTRL_DESC_EXPORT[ref]||'';
+    var appl=ctrl.applicable?'Yes':'No';
+    var status=ctrl.applicable?implLabel(ctrl.implStatus):'Excluded';
+    var reason=ctrl.soaReason||'BP';
+    var implDocs=getImplDocsForControl(c,ctrl.id);
+    soaRows.push([
+      ref,ctrl.name,desc,appl,status,
+      (!ctrl.applicable?'':reason==='RA'?'X':'\u00a0'),
+      (!ctrl.applicable?'':reason==='RE'?'X':'\u00a0'),
+      (!ctrl.applicable?'':reason==='BP'?'X':'\u00a0'),
+      (!ctrl.applicable?'':reason==='CA'?'X':'\u00a0'),
+      ctrl.applicable?'':(ctrl.soaExclusion||''),
+      implDocs.join('; ')||'','',''
     ]);
   });
+  var wsSoA=XL.utils.aoa_to_sheet(soaRows);
+  wsSoA['!cols']=[{wch:8},{wch:35},{wch:64},{wch:12},{wch:15},{wch:5},{wch:4},{wch:4},{wch:4},{wch:20},{wch:35},{wch:14},{wch:14}];
+  XL.utils.book_append_sheet(wb,wsSoA,'Statement of Applicability');
 
-  // Build CSV as fallback (xlsx requires library)
-  var csv=rows.map(function(row){return row.map(function(cell){return '"'+(cell+'').replace(/"/g,'""')+'"';}).join(',');}).join('\n');
-  var blob=new Blob([csv],{type:'text/csv'});
-  var a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download=c.name.replace(/[^a-z0-9]/gi,'_')+'_SoA.csv';
-  a.click();
+  // ── Download ──────────────────────────────────────────────────────
+  var fname=c.name.replace(/[^a-z0-9]/gi,'_')+'_SoA_'+today_str.replace(/-/g,'')+'.xlsx';
+  XL.writeFile(wb,fname);
 }
 
 
