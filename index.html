@@ -1461,12 +1461,15 @@ function saveSoaField(idx,field,val){
   var c=clients()[ST.sel];if(!c)return;
   var ctrls=getSoaControls(c);
   if(!ctrls[idx])return;
+  // Booleans come in as strings from onclick attrs
+  if(val==='true')val=true;
+  if(val==='false')val=false;
   ctrls[idx][field]=val;
   if(field==='applicable'&&!val){ctrls[idx].implStatus='na';}
   if(field==='applicable'&&val&&ctrls[idx].implStatus==='na'){ctrls[idx].implStatus='planned';}
   saveDB();
-  // Only re-render dashboard counters, not the whole tab (avoid losing focus)
-  updateSoaDashboard(c);
+  // Full re-render so toggle, colors and progress bar all update live
+  render();
 }
 
 function updateSoaDashboard(c){
@@ -1504,16 +1507,19 @@ function renderSoaTab(c){
   h+='<div class="stats-row" style="margin-bottom:1.25rem">';
   h+='<div class="stat-card"><div class="stat-val" style="color:var(--blue)" id="soa-dash-applicable">'+ap.length+'</div><div class="stat-lbl">Applicable</div></div>';
   h+='<div class="stat-card"><div class="stat-val" style="color:#5F5E5A" id="soa-dash-na">'+na.length+'</div><div class="stat-lbl">Niet van toepassing</div></div>';
-  h+='<div class="stat-card"><div class="stat-val" style="color:#0F6E56" id="soa-dash-impl">'+impl.length+'</div><div class="stat-lbl">Geïmplementeerd</div></div>';
+  h+='<div class="stat-card"><div class="stat-val" style="color:#0F6E56" id="soa-dash-impl">'+impl.length+'</div><div class="stat-lbl">Implemented</div></div>';
   h+='<div class="stat-card"><div class="stat-val" style="color:var(--amber)" id="soa-dash-inprog">'+inprog.length+'</div><div class="stat-lbl">In Progress</div></div>';
-  h+='<div class="stat-card"><div class="stat-val" style="color:#5F5E5A" id="soa-dash-planned">'+planned.length+'</div><div class="stat-lbl">Planned</div></div>';
+  h+='<div class="stat-card"><div class="stat-val" style="color:var(--blue)" id="soa-dash-planned">'+planned.length+'</div><div class="stat-lbl">Planned</div></div>';
   h+='</div>';
 
   // Progress bar
-  h+='<div class="prog-hdr" style="margin-bottom:1.5rem"><div class="prog-pct">'+pct+'%</div><div class="prog-trk"><div class="prog-lbl" id="soa-prog-lbl">'+impl.length+' van '+ap.length+' applicable controls geïmplementeerd ('+pct+'%)</div><div class="prog-bar"><div class="prog-fill" id="soa-prog-fill" style="width:'+pct+'%"></div></div></div></div>';
+  h+='<div class="prog-hdr" style="margin-bottom:1.5rem"><div class="prog-pct" id="soa-prog-pct">'+pct+'%</div><div class="prog-trk"><div class="prog-lbl" id="soa-prog-lbl">'+impl.length+' van '+ap.length+' applicable controls geimplementeerd ('+pct+'%)</div><div class="prog-bar"><div class="prog-fill" id="soa-prog-fill" style="width:'+pct+'%"></div></div></div></div>';
 
-  // Export button
-  h+='<div style="display:flex;justify-content:flex-end;margin-bottom:1rem"><button class="btn btn-sm" onclick="exportSoaExcel()">&#8659; Export SoA (.xlsx)</button></div>';
+  // Export + legend row
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">';
+  h+='<div style="font-size:11px;color:var(--text-muted)">RA = Risk Assessment &nbsp;|&nbsp; RE = Regulatory/Legal &nbsp;|&nbsp; BP = Best Practice &nbsp;|&nbsp; CA = Contractual</div>';
+  h+='<button class="btn btn-sm" onclick="exportSoaExcel()">&#8659; Export SoA (.csv)</button>';
+  h+='</div>';
 
   // Group filter
   var groups=['A.5','A.6','A.7','A.8'];
@@ -1522,28 +1528,38 @@ function renderSoaTab(c){
   h+='<button onclick="ST.soaGrp=\'all\';render()" class="btn btn-sm '+(allActive?'btn-primary':'')+'">Alle (93)</button>';
   groups.forEach(function(g){
     var cnt=ctrls.filter(function(x){return x.group===g;}).length;
-    var gActive=ST.soaGrp===g;
-    h+='<button onclick="ST.soaGrp=\''+g+'\';render()" class="btn btn-sm '+(gActive?'btn-primary':'')+'">'+g+' ('+cnt+')</button>';
+    h+='<button onclick="ST.soaGrp=\''+g+'\';render()" class="btn btn-sm '+(ST.soaGrp===g?'btn-primary':'')+'">'+g+' ('+cnt+')</button>';
   });
   h+='</div>';
 
   var filtered=(!ST.soaGrp||ST.soaGrp==='all')?ctrls:ctrls.filter(function(x){return x.group===ST.soaGrp;});
 
-  h+='<div class="tbl-wrap"><table style="table-layout:fixed"><colgroup><col style="width:58px"><col style="width:26%"><col style="width:58px"><col style="width:70px"><col style="width:26%"><col style="width:120px"></colgroup>';
-  h+='<thead><tr><th>ID</th><th>Control</th><th>Appl.</th><th>Reden</th><th>Implementing document</th><th>Status</th></tr></thead><tbody>';
+  h+='<div class="tbl-wrap"><table style="table-layout:fixed"><colgroup><col style="width:52px"><col style="width:28%"><col style="width:90px"><col style="width:80px"><col style="width:26%"><col style="width:130px"></colgroup>';
+  h+='<thead><tr><th>ID</th><th>Control</th><th>Applicable</th><th>Reden (RA/RE/BP/CA)</th><th>Implementing document</th><th>Status</th></tr></thead><tbody>';
 
-  filtered.forEach(function(ctrl,fi){
+  filtered.forEach(function(ctrl){
     var ri=ctrls.indexOf(ctrl);
-    var implDoc=getImplDocForControl(c, ctrl.id);
+    var implDoc=getImplDocForControl(c,ctrl.id);
     var naRow=!ctrl.applicable;
-    var statusColor=ctrl.implStatus==='implemented'?'#0F6E56':ctrl.implStatus==='in_progress'?'var(--amber)':'#5F5E5A';
+
+    // Status badge colors matching audit/gap
+    var statusBadge='';
+    if(ctrl.applicable){
+      var sc=ctrl.implStatus==='implemented'?'b-compliant':ctrl.implStatus==='in_progress'?'b-ofi':'b-open';
+      var sl=ctrl.implStatus==='implemented'?'Implemented':ctrl.implStatus==='in_progress'?'In Progress':'Planned';
+      statusBadge='<span class="badge '+sc+'">'+sl+'</span>';
+    } else {
+      statusBadge='<span style="font-size:11px;color:var(--text-muted)">N/A</span>';
+    }
 
     h+='<tr'+(naRow?' class="na-row"':'')+'>';
-    h+='<td style="font-size:11px;color:var(--text-muted)">'+ctrl.id+'</td>';
+    h+='<td style="font-size:11px;color:var(--text-muted)">A.'+ctrl.id+'</td>';
     h+='<td style="font-size:12px">'+ctrl.name+'</td>';
-    // Applicable toggle
-    h+='<td><label class="soa-toggle" onclick="saveSoaField('+ri+',\'applicable\','+(!ctrl.applicable)+')" title="'+(ctrl.applicable?'Klik om uit te sluiten':'Klik om toe te voegen')+'"><div class="toggle-box'+(ctrl.applicable?' on':'')+'"><div class="toggle-dot"></div></div></label></td>';
-    // Reason dropdown (only when applicable; show exclusion reason when not applicable)
+
+    // Applicable toggle — calls saveSoaField which re-renders
+    h+='<td><label class="soa-toggle" onclick="saveSoaField('+ri+',\'applicable\','+(!ctrl.applicable)+')"><div class="toggle-box'+(ctrl.applicable?' on':'')+'"><div class="toggle-dot"></div></div></label></td>';
+
+    // Reason / exclusion
     if(ctrl.applicable){
       h+='<td><select style="font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);padding:2px" onchange="saveSoaField('+ri+',\'soaReason\',this.value)">';
       ['RA','RE','BP','CA'].forEach(function(r){h+='<option value="'+r+'"'+(ctrl.soaReason===r?' selected':'')+'>'+r+'</option>';});
@@ -1551,27 +1567,34 @@ function renderSoaTab(c){
     } else {
       h+='<td><input type="text" placeholder="Reden uitsluiting" value="'+(ctrl.soaExclusion||'')+'" style="font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);padding:2px 4px" onchange="saveSoaField('+ri+',\'soaExclusion\',this.value)" /></td>';
     }
-    // Implementing document (derived from domains)
-    h+='<td style="font-size:11px;color:var(--text-muted)" title="'+(implDoc?implDoc:ctrl.doc||'')+'">'+
-       (implDoc?'<a href="#" onclick="return false" style="color:var(--blue);text-decoration:none" title="'+implDoc+'">'+implDoc.substring(0,28)+(implDoc.length>28?'…':'')+'</a>':'<span style="color:var(--border)">'+( ctrl.doc?ctrl.doc.substring(0,28)+(ctrl.doc.length>28?'…':''):'—')+'</span>')+'</td>';
-    // Implementation status
+
+    // Implementing document
+    h+='<td style="font-size:11px" title="'+(implDoc||ctrl.doc||'')+'">';
+    if(implDoc){
+      h+='<span style="color:var(--blue)">'+implDoc.substring(0,32)+(implDoc.length>32?'…':'')+'</span>';
+    } else {
+      h+='<span style="color:var(--border)">'+(ctrl.doc?ctrl.doc.substring(0,32)+(ctrl.doc.length>32?'…':''):'—')+'</span>';
+    }
+    h+='</td>';
+
+    // Status select (colored badges via inline select styling)
     if(ctrl.applicable){
-      h+='<td><select style="font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:'+statusColor+';font-weight:500;padding:2px" onchange="saveSoaField('+ri+',\'implStatus\',this.value)">';
+      var selColor=ctrl.implStatus==='implemented'?'#0F6E56':ctrl.implStatus==='in_progress'?'#B45309':'#1a6bbd';
+      h+='<td>';
+      h+='<select style="font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:'+selColor+';font-weight:600;padding:2px" onchange="saveSoaField('+ri+',\'implStatus\',this.value)">';
       [['implemented','Implemented'],['in_progress','In Progress'],['planned','Planned']].forEach(function(opt){
         h+='<option value="'+opt[0]+'"'+(ctrl.implStatus===opt[0]?' selected':'')+'>'+opt[1]+'</option>';
       });
-      h+='</select></td>';
+      h+='</select>';
+      h+='</td>';
     } else {
       h+='<td><span style="font-size:11px;color:var(--text-muted)">N/A</span></td>';
     }
+
     h+='</tr>';
   });
 
   h+='</tbody></table></div>';
-
-  // Legend
-  h+='<div style="margin-top:1rem;font-size:11px;color:var(--text-muted)">RA = Risk Assessment &nbsp;|&nbsp; RE = Regulatory/Legal &nbsp;|&nbsp; BP = Best Practice &nbsp;|&nbsp; CA = Contractual</div>';
-
   return h;
 }
 
