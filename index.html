@@ -532,7 +532,7 @@ var CLAUSES_TEMPLATE=[
 {id:'10.2',name:'Continual improvement',doc:'Improvement log / Lessons learned'}
 ];
 
-function freshAnnex(){ return ANNEX_A_TEMPLATE.map(function(c){ return Object.assign({applicable:true,status:'',docName:'',docLink:'',finding:'',improvement:''},c); }); }
+function freshAnnex(){ return ANNEX_A_TEMPLATE.map(function(c){ return Object.assign({applicable:true,status:'',docName:'',docLink:'',finding:'',improvement:'',soaReason:'BP',soaExclusion:'',implStatus:'planned'},c); }); }
 function freshClauses(){ return CLAUSES_TEMPLATE.map(function(c){ return Object.assign({status:'',docName:'',docLink:'',finding:'',improvement:''},c); }); }
 
 // ═══════════════════════════════════════════
@@ -603,7 +603,7 @@ function aDesc(id){return ANNEX_CTRL_DESC['A.'+id]||ANNEX_CTRL_DESC[id]||{};}
 
 var AUDIT_STATUSES=['open','compliant','ofi','minor','major'];
 var DB={impl:[],audit:[],gap:[]};
-var ST={module:'impl',view:'clients',sel:null,tab:'domains',modal:null,mdata:null,search:'',fSt:'',fCat:'',expandedPhase:null,auditTab:'clausules',auditGrp:'A.5',gapTab:'clausules',gapGrp:'A.5',interviewGrp:'A.5',interviewSubTab:'annexa',openNotes:{},openDomains:{}};
+var ST={module:'impl',view:'clients',sel:null,tab:'domains',modal:null,mdata:null,search:'',fSt:'',fCat:'',expandedPhase:null,auditTab:'clausules',auditGrp:'A.5',gapTab:'clausules',gapGrp:'A.5',interviewGrp:'A.5',interviewSubTab:'annexa',soaGrp:'all',openNotes:{},openDomains:{}};
 var importFiles=[];
 
 function loadDB(){
@@ -1096,8 +1096,9 @@ function renderImplDetail(){
   h+=renderScopeCard(c);
   h+='<div class="prog-hdr"><div class="prog-pct">'+p+'%</div><div class="prog-trk"><div class="prog-lbl">Totale voortgang &mdash; '+apr+' van '+total+' documenten goedgekeurd</div><div class="prog-bar"><div class="prog-fill" style="width:'+p+'%"></div></div></div></div>';
   h+='<div class="stats-row"><div class="stat-card"><div class="stat-val" style="color:#0F6E56">'+apr+'</div><div class="stat-lbl">Goedgekeurd</div></div><div class="stat-card"><div class="stat-val" style="color:var(--amber)">'+rev+'</div><div class="stat-lbl">In review</div></div><div class="stat-card"><div class="stat-val" style="color:#5F5E5A">'+con+'</div><div class="stat-lbl">Concept</div></div><div class="stat-card"><div class="stat-val" style="color:var(--blue)">'+total+'</div><div class="stat-lbl">Totaal</div></div></div>';
-  h+='<div class="tabs"><button class="tab'+(ST.tab==='domains'?' active':'')+'" onclick="setTab(\'domains\')">Domeinen</button><button class="tab'+(ST.tab==='notes'?' active':'')+'" onclick="setTab(\'notes\')">Notities</button></div>';
+  h+='<div class="tabs"><button class="tab'+(ST.tab==='domains'?' active':'')+'" onclick="setTab(\'domains\')">Domeinen</button><button class="tab'+(ST.tab==='soa'?' active':'')+'" onclick="setTab(\'soa\')">Statement of Applicability</button><button class="tab'+(ST.tab==='notes'?' active':'')+'" onclick="setTab(\'notes\')">Notities</button></div>';
   if(ST.tab==='domains')h+=renderDomainsTab(c);
+  else if(ST.tab==='soa')h+=renderSoaTab(c);
   else h+=renderNotesTab();
   return h;
 }
@@ -1441,6 +1442,181 @@ function renderNotesTab(){
   } else {logH='<div style="text-align:center;padding:1.5rem;font-size:13px;color:var(--text-muted);font-style:italic">Nog geen notities opgeslagen.</div>';}
   return '<div class="notes-wrap"><textarea class="notes-area" id="notes-in" placeholder="Nieuwe notitie toevoegen..."></textarea><div style="margin-top:8px;text-align:right"><button class="btn btn-primary" onclick="saveNotes()">+ Notitie opslaan</button></div></div>'+logH;
 }
+
+// ── SOA TAB ────────────────────────────────────────────────────────
+function getSoaControls(c){
+  // Ensure all 93 controls exist on the client with soaReason/implStatus fields
+  var base=c.soaControls;
+  if(!base||base.length!==ANNEX_A_TEMPLATE.length){
+    base=ANNEX_A_TEMPLATE.map(function(t){
+      var existing=(c.soaControls||[]).filter(function(x){return x.id===t.id;})[0]||{};
+      return Object.assign({applicable:true,soaReason:'BP',soaExclusion:'',implStatus:'planned'},t,existing);
+    });
+    c.soaControls=base;
+  }
+  return base;
+}
+
+function saveSoaField(idx,field,val){
+  var c=clients()[ST.sel];if(!c)return;
+  var ctrls=getSoaControls(c);
+  if(!ctrls[idx])return;
+  ctrls[idx][field]=val;
+  if(field==='applicable'&&!val){ctrls[idx].implStatus='na';}
+  if(field==='applicable'&&val&&ctrls[idx].implStatus==='na'){ctrls[idx].implStatus='planned';}
+  saveDB();
+  // Only re-render dashboard counters, not the whole tab (avoid losing focus)
+  updateSoaDashboard(c);
+}
+
+function updateSoaDashboard(c){
+  var ctrls=getSoaControls(c);
+  var ap=ctrls.filter(function(x){return x.applicable;});
+  var na=ctrls.filter(function(x){return !x.applicable;});
+  var impl=ap.filter(function(x){return x.implStatus==='implemented';});
+  var inprog=ap.filter(function(x){return x.implStatus==='in_progress';});
+  var planned=ap.filter(function(x){return x.implStatus==='planned';});
+
+  var d=document.getElementById('soa-dash-applicable');if(d)d.textContent=ap.length;
+  d=document.getElementById('soa-dash-na');if(d)d.textContent=na.length;
+  d=document.getElementById('soa-dash-impl');if(d)d.textContent=impl.length;
+  d=document.getElementById('soa-dash-inprog');if(d)d.textContent=inprog.length;
+  d=document.getElementById('soa-dash-planned');if(d)d.textContent=planned.length;
+
+  // Progress bar
+  var pct=ap.length?Math.round(impl.length/ap.length*100):0;
+  var bar=document.getElementById('soa-prog-fill');if(bar)bar.style.width=pct+'%';
+  var lbl=document.getElementById('soa-prog-lbl');if(lbl)lbl.textContent=impl.length+' van '+ap.length+' applicable controls geïmplementeerd ('+pct+'%)';
+}
+
+function renderSoaTab(c){
+  var ctrls=getSoaControls(c);
+  var ap=ctrls.filter(function(x){return x.applicable;});
+  var na=ctrls.filter(function(x){return !x.applicable;});
+  var impl=ap.filter(function(x){return x.implStatus==='implemented';});
+  var inprog=ap.filter(function(x){return x.implStatus==='in_progress';});
+  var planned=ap.filter(function(x){return x.implStatus==='planned';});
+  var pct=ap.length?Math.round(impl.length/ap.length*100):0;
+
+  var h='';
+
+  // Dashboard
+  h+='<div class="stats-row" style="margin-bottom:1.25rem">';
+  h+='<div class="stat-card"><div class="stat-val" style="color:var(--blue)" id="soa-dash-applicable">'+ap.length+'</div><div class="stat-lbl">Applicable</div></div>';
+  h+='<div class="stat-card"><div class="stat-val" style="color:#5F5E5A" id="soa-dash-na">'+na.length+'</div><div class="stat-lbl">Niet van toepassing</div></div>';
+  h+='<div class="stat-card"><div class="stat-val" style="color:#0F6E56" id="soa-dash-impl">'+impl.length+'</div><div class="stat-lbl">Geïmplementeerd</div></div>';
+  h+='<div class="stat-card"><div class="stat-val" style="color:var(--amber)" id="soa-dash-inprog">'+inprog.length+'</div><div class="stat-lbl">In Progress</div></div>';
+  h+='<div class="stat-card"><div class="stat-val" style="color:#5F5E5A" id="soa-dash-planned">'+planned.length+'</div><div class="stat-lbl">Planned</div></div>';
+  h+='</div>';
+
+  // Progress bar
+  h+='<div class="prog-hdr" style="margin-bottom:1.5rem"><div class="prog-pct">'+pct+'%</div><div class="prog-trk"><div class="prog-lbl" id="soa-prog-lbl">'+impl.length+' van '+ap.length+' applicable controls geïmplementeerd ('+pct+'%)</div><div class="prog-bar"><div class="prog-fill" id="soa-prog-fill" style="width:'+pct+'%"></div></div></div></div>';
+
+  // Export button
+  h+='<div style="display:flex;justify-content:flex-end;margin-bottom:1rem"><button class="btn btn-sm" onclick="exportSoaExcel()">&#8659; Export SoA (.xlsx)</button></div>';
+
+  // Group filter
+  var groups=['A.5','A.6','A.7','A.8'];
+  h+='<div style="display:flex;gap:4px;margin-bottom:1rem;flex-wrap:wrap">';
+  var allActive=(!ST.soaGrp||ST.soaGrp==='all');
+  h+='<button onclick="ST.soaGrp=\'all\';render()" class="btn btn-sm '+(allActive?'btn-primary':'')+'">Alle (93)</button>';
+  groups.forEach(function(g){
+    var cnt=ctrls.filter(function(x){return x.group===g;}).length;
+    var gActive=ST.soaGrp===g;
+    h+='<button onclick="ST.soaGrp=\''+g+'\';render()" class="btn btn-sm '+(gActive?'btn-primary':'')+'">'+g+' ('+cnt+')</button>';
+  });
+  h+='</div>';
+
+  var filtered=(!ST.soaGrp||ST.soaGrp==='all')?ctrls:ctrls.filter(function(x){return x.group===ST.soaGrp;});
+
+  h+='<div class="tbl-wrap"><table style="table-layout:fixed"><colgroup><col style="width:58px"><col style="width:26%"><col style="width:58px"><col style="width:70px"><col style="width:26%"><col style="width:120px"></colgroup>';
+  h+='<thead><tr><th>ID</th><th>Control</th><th>Appl.</th><th>Reden</th><th>Implementing document</th><th>Status</th></tr></thead><tbody>';
+
+  filtered.forEach(function(ctrl,fi){
+    var ri=ctrls.indexOf(ctrl);
+    var implDoc=getImplDocForControl(c, ctrl.id);
+    var naRow=!ctrl.applicable;
+    var statusColor=ctrl.implStatus==='implemented'?'#0F6E56':ctrl.implStatus==='in_progress'?'var(--amber)':'#5F5E5A';
+
+    h+='<tr'+(naRow?' class="na-row"':'')+'>';
+    h+='<td style="font-size:11px;color:var(--text-muted)">'+ctrl.id+'</td>';
+    h+='<td style="font-size:12px">'+ctrl.name+'</td>';
+    // Applicable toggle
+    h+='<td><label class="soa-toggle" onclick="saveSoaField('+ri+',\'applicable\','+(!ctrl.applicable)+')" title="'+(ctrl.applicable?'Klik om uit te sluiten':'Klik om toe te voegen')+'"><div class="toggle-box'+(ctrl.applicable?' on':'')+'"><div class="toggle-dot"></div></div></label></td>';
+    // Reason dropdown (only when applicable; show exclusion reason when not applicable)
+    if(ctrl.applicable){
+      h+='<td><select style="font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);padding:2px" onchange="saveSoaField('+ri+',\'soaReason\',this.value)">';
+      ['RA','RE','BP','CA'].forEach(function(r){h+='<option value="'+r+'"'+(ctrl.soaReason===r?' selected':'')+'>'+r+'</option>';});
+      h+='</select></td>';
+    } else {
+      h+='<td><input type="text" placeholder="Reden uitsluiting" value="'+(ctrl.soaExclusion||'')+'" style="font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);padding:2px 4px" onchange="saveSoaField('+ri+',\'soaExclusion\',this.value)" /></td>';
+    }
+    // Implementing document (derived from domains)
+    h+='<td style="font-size:11px;color:var(--text-muted)" title="'+(implDoc?implDoc:ctrl.doc||'')+'">'+
+       (implDoc?'<a href="#" onclick="return false" style="color:var(--blue);text-decoration:none" title="'+implDoc+'">'+implDoc.substring(0,28)+(implDoc.length>28?'…':'')+'</a>':'<span style="color:var(--border)">'+( ctrl.doc?ctrl.doc.substring(0,28)+(ctrl.doc.length>28?'…':''):'—')+'</span>')+'</td>';
+    // Implementation status
+    if(ctrl.applicable){
+      h+='<td><select style="font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:'+statusColor+';font-weight:500;padding:2px" onchange="saveSoaField('+ri+',\'implStatus\',this.value)">';
+      [['implemented','Implemented'],['in_progress','In Progress'],['planned','Planned']].forEach(function(opt){
+        h+='<option value="'+opt[0]+'"'+(ctrl.implStatus===opt[0]?' selected':'')+'>'+opt[1]+'</option>';
+      });
+      h+='</select></td>';
+    } else {
+      h+='<td><span style="font-size:11px;color:var(--text-muted)">N/A</span></td>';
+    }
+    h+='</tr>';
+  });
+
+  h+='</tbody></table></div>';
+
+  // Legend
+  h+='<div style="margin-top:1rem;font-size:11px;color:var(--text-muted)">RA = Risk Assessment &nbsp;|&nbsp; RE = Regulatory/Legal &nbsp;|&nbsp; BP = Best Practice &nbsp;|&nbsp; CA = Contractual</div>';
+
+  return h;
+}
+
+// Zoek het eerste document in de domeinen dat deze control dekt
+function getImplDocForControl(c, controlId){
+  var domains=c.domains||[];
+  for(var di=0;di<domains.length;di++){
+    var docs=domains[di].docs||[];
+    for(var doci=0;doci<docs.length;doci++){
+      var doc=docs[doci];
+      var controls=doc.controls||[];
+      if(controls.indexOf(controlId)>-1||doc.control===controlId){
+        return doc.name||'';
+      }
+    }
+  }
+  return '';
+}
+
+function exportSoaExcel(){
+  var c=clients()[ST.sel];if(!c)return;
+  var ctrls=getSoaControls(c);
+  var rows=[['Control Ref','Control Name','Applicable','Reason for Applicability','Reason for Exclusion','Implementing Document','Implementation Status']];
+  ctrls.forEach(function(ctrl){
+    var implDoc=getImplDocForControl(c,ctrl.id);
+    rows.push([
+      'A.'+ctrl.id,
+      ctrl.name,
+      ctrl.applicable?'Yes':'No',
+      ctrl.applicable?(ctrl.soaReason||''):'',
+      !ctrl.applicable?(ctrl.soaExclusion||''):'',
+      implDoc||ctrl.doc||'',
+      ctrl.applicable?(ctrl.implStatus==='implemented'?'Implemented':ctrl.implStatus==='in_progress'?'In Progress':'Planned'):'N/A'
+    ]);
+  });
+
+  // Build CSV as fallback (xlsx requires library)
+  var csv=rows.map(function(row){return row.map(function(cell){return '"'+(cell+'').replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+  var blob=new Blob([csv],{type:'text/csv'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=c.name.replace(/[^a-z0-9]/gi,'_')+'_SoA.csv';
+  a.click();
+}
+
 
 // ═══════════════════════════════════════════
 // AUDIT DETAIL
