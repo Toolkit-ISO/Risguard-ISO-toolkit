@@ -1591,12 +1591,13 @@ function renderSoaTab(c){
     }
     h+='</td>';
 
-    // Status select with colored background like GAP
+    // Status select with colored background — options get neutral bg to prevent bleed
     if(ctrl.applicable){
+      var implSty=soaImplColor(ctrl.implStatus);
       h+='<td>';
-      h+='<select style="font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;font-weight:600;padding:2px;'+soaImplColor(ctrl.implStatus)+'" onchange="saveSoaField('+ri+',\'implStatus\',this.value);updateSoaImplColor(this)">';
-      [['implemented','Implemented'],['in_progress','In Progress'],['planned','Planned']].forEach(function(opt){
-        h+='<option value="'+opt[0]+'"'+(ctrl.implStatus===opt[0]?' selected':'')+'>'+opt[1]+'</option>';
+      h+='<select style="font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;font-weight:600;padding:2px;'+implSty+'" onchange="saveSoaField('+ri+',\'implStatus\',this.value);updateSoaImplColor(this)">';
+      [['implemented','Implemented','#E1F5EE','#0F6E56'],['in_progress','In Progress','#FFF3E0','#B45309'],['planned','Planned','#EBF2FF','#1a6bbd']].forEach(function(opt){
+        h+='<option value="'+opt[0]+'"'+(ctrl.implStatus===opt[0]?' selected':'')+' style="background:'+opt[2]+';color:'+opt[3]+'">'+opt[1]+'</option>';
       });
       h+='</select>';
       h+='</td>';
@@ -1611,16 +1612,30 @@ function renderSoaTab(c){
   return h;
 }
 
+// Normaliseer control ID voor matching: '7.1' ↔ 'A.7.1', 'Clause 7.1' etc.
+function normalizeCtrlId(id){
+  if(!id)return '';
+  id=id.trim();
+  // Verwijder 'A.' prefix voor Annex A controls
+  if(/^A\./.test(id))return id.substring(2);
+  // Verwijder 'Clause ' prefix voor clausules
+  if(/^Clause /i.test(id))return id.replace(/^Clause /i,'');
+  return id;
+}
+
 // Zoek ALLE documenten in de domeinen die deze control dekken
 function getImplDocsForControl(c, controlId){
+  var normTarget=normalizeCtrlId(controlId);
   var domains=c.domains||[];
   var found=[];
   domains.forEach(function(dom){
     (dom.docs||[]).forEach(function(doc){
       var controls=doc.controls||[];
-      if(controls.indexOf(controlId)>-1||doc.control===controlId){
-        if(found.indexOf(doc.name)===-1)found.push(doc.name||'');
-      }
+      // Check both normalized and raw match
+      var match=controls.some(function(cv){
+        return cv===controlId||normalizeCtrlId(cv)===normTarget;
+      })||doc.control===controlId||normalizeCtrlId(doc.control||'')===normTarget;
+      if(match&&found.indexOf(doc.name)===-1)found.push(doc.name||'');
     });
   });
   return found;
