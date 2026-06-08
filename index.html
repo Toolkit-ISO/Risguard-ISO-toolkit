@@ -1949,19 +1949,19 @@ function exportSoaExcel(){
   msRows2.push('<row r="1" ht="30" customHeight="1">'
     +sc('A1','STATEMENT OF APPLICABILITY \u2014 MANAGEMENT SUMMARY',1)
     +ec('B1',1)+ec('C1',1)+ec('D1',1)+ec('E1',1)+ec('F1',1)
-    +ec('G1',1)+ec('H1',1)+ec('I1',1)+ec('J1',1)+ec('K1',1)+ec('L1',1)
+    +ec('G1',1)+ec('H1',1)+ec('I1',1)+ec('J1',1)+ec('K1',1)
     +'</row>');
   // Row 2 spacer, Row 3: section headers
   msRows2.push('<row r="3" ht="22" customHeight="1">'
     +sc('A3','OVERALL COVERAGE',1)+ec('B3',1)+ec('C3',1)+ec('D3',1)+ec('E3',1)+ec('F3',1)
-    +ec('G3',0)+sc('H3','IMPLEMENTATION STATUS (APPLICABLE CONTROLS)',1)+ec('I3',1)+ec('J3',1)+ec('K3',1)+ec('L3',1)
+    +ec('G3',0)+sc('H3','IMPLEMENTATION STATUS (APPLICABLE CONTROLS)',1)+ec('I3',1)+ec('J3',1)+ec('K3',1)
     +'</row>');
   // Row 4: column headers
   msRows2.push('<row r="4" ht="28" customHeight="1">'
     +ec('A4',3)+ec('B4',3)
     +sc('C4','Total',3)+sc('D4','Applicable',3)+sc('E4','Not Applicable',3)+sc('F4','Justification OK',3)
     +ec('G4',0)
-    +sc('I4','Implemented',3)+sc('J4','In Progress',3)+sc('K4','Planned',3)+sc('L4','Excluded',3)
+    +sc('I4','Implemented',3)+sc('J4','In Progress',3)+sc('K4','Planned',3)
     +'</row>');
 
   var msGroups=[
