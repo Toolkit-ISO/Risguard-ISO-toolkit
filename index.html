@@ -1345,11 +1345,23 @@ function saveDomainDoc(di,doci){
   var cbs=document.querySelectorAll('.dd-ctrl-cb:checked');
   var ctrls=[];cbs.forEach(function(cb){ctrls.push(cb.value);});
   var doc={name:name.trim(),link:link,controls:ctrls,category:cat,status:status,date:today()};
+  // Check if domain has been changed
+  var newDi=parseInt((document.getElementById('dd-domain')||{}).value);
+  if(isNaN(newDi))newDi=di;
   if(doci!==null&&doci!==undefined){
-    c.domains[di].docs[doci]=doc;
+    if(newDi!==di){
+      // Move to different domain
+      c.domains[di].docs.splice(doci,1);
+      c.domains[newDi].docs=c.domains[newDi].docs||[];
+      c.domains[newDi].docs.push(doc);
+      if(ST.openDomains){ST.openDomains[di]=true;ST.openDomains[newDi]=true;}
+    } else {
+      c.domains[di].docs[doci]=doc;
+    }
   } else {
-    c.domains[di].docs.push(doc);
-    if(ST.openDomains)ST.openDomains[di]=true;
+    c.domains[newDi].docs=c.domains[newDi].docs||[];
+    c.domains[newDi].docs.push(doc);
+    if(ST.openDomains)ST.openDomains[newDi]=true;
   }
   saveDB();closeModal();render();
 }
@@ -1539,7 +1551,6 @@ function renderSoaTab(c){
 
   filtered.forEach(function(ctrl){
     var ri=ctrls.indexOf(ctrl);
-    var implDoc=getImplDocForControl(c,ctrl.id);
     var naRow=!ctrl.applicable;
 
     // Status badge colors matching audit/gap
@@ -1568,20 +1579,22 @@ function renderSoaTab(c){
       h+='<td><input type="text" placeholder="Reden uitsluiting" value="'+(ctrl.soaExclusion||'')+'" style="font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);padding:2px 4px" onchange="saveSoaField('+ri+',\'soaExclusion\',this.value)" /></td>';
     }
 
-    // Implementing document
-    h+='<td style="font-size:11px" title="'+(implDoc||ctrl.doc||'')+'">';
-    if(implDoc){
-      h+='<span style="color:var(--blue)">'+implDoc.substring(0,32)+(implDoc.length>32?'…':'')+'</span>';
+    // Implementing document(s) — meerdere per control
+    var implDocs=getImplDocsForControl(c,ctrl.id);
+    h+='<td style="font-size:11px" title="'+(implDocs.length?implDocs.join(', '):ctrl.doc||'')+'">';
+    if(implDocs.length){
+      h+=implDocs.map(function(d){
+        return '<span style="display:inline-block;background:#EBF2FF;color:#1a6bbd;border-radius:4px;padding:1px 5px;margin:1px 2px 1px 0;font-size:10px;white-space:nowrap">'+d.substring(0,22)+(d.length>22?'…':'')+'</span>';
+      }).join('');
     } else {
       h+='<span style="color:var(--border)">'+(ctrl.doc?ctrl.doc.substring(0,32)+(ctrl.doc.length>32?'…':''):'—')+'</span>';
     }
     h+='</td>';
 
-    // Status select (colored badges via inline select styling)
+    // Status select with colored background like GAP
     if(ctrl.applicable){
-      var selColor=ctrl.implStatus==='implemented'?'#0F6E56':ctrl.implStatus==='in_progress'?'#B45309':'#1a6bbd';
       h+='<td>';
-      h+='<select style="font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:'+selColor+';font-weight:600;padding:2px" onchange="saveSoaField('+ri+',\'implStatus\',this.value)">';
+      h+='<select style="font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;font-weight:600;padding:2px;'+soaImplColor(ctrl.implStatus)+'" onchange="saveSoaField('+ri+',\'implStatus\',this.value);updateSoaImplColor(this)">';
       [['implemented','Implemented'],['in_progress','In Progress'],['planned','Planned']].forEach(function(opt){
         h+='<option value="'+opt[0]+'"'+(ctrl.implStatus===opt[0]?' selected':'')+'>'+opt[1]+'</option>';
       });
@@ -1598,20 +1611,24 @@ function renderSoaTab(c){
   return h;
 }
 
-// Zoek het eerste document in de domeinen dat deze control dekt
-function getImplDocForControl(c, controlId){
+// Zoek ALLE documenten in de domeinen die deze control dekken
+function getImplDocsForControl(c, controlId){
   var domains=c.domains||[];
-  for(var di=0;di<domains.length;di++){
-    var docs=domains[di].docs||[];
-    for(var doci=0;doci<docs.length;doci++){
-      var doc=docs[doci];
+  var found=[];
+  domains.forEach(function(dom){
+    (dom.docs||[]).forEach(function(doc){
       var controls=doc.controls||[];
       if(controls.indexOf(controlId)>-1||doc.control===controlId){
-        return doc.name||'';
+        if(found.indexOf(doc.name)===-1)found.push(doc.name||'');
       }
-    }
-  }
-  return '';
+    });
+  });
+  return found;
+}
+// Backwards compat — geeft eerste document terug
+function getImplDocForControl(c, controlId){
+  var docs=getImplDocsForControl(c,controlId);
+  return docs.length?docs[0]:'';
 }
 
 function exportSoaExcel(){
@@ -1950,7 +1967,12 @@ function renderModal(){
     var _toggleBtn=!_showAll?'<button type="button" onclick="ddShowAllCtrls('+_di+')" class="btn btn-sm" style="margin-top:8px;font-size:11px">&#9660; Toon alle '+_allCtrlList.length+' controls</button>':'<button type="button" onclick="ddShowDomainCtrls()" class="btn btn-sm" style="margin-top:8px;font-size:11px">&#9650; Toon alleen domein-controls</button>';
     root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:600px">'+
       '<div class="modal-title">'+(ST.modal==='editDomainDoc'?'Document bewerken':'Document toevoegen')+'</div>'+
-      '<div style="font-size:12px;color:var(--text-muted);margin-bottom:1rem;font-weight:500">Domein: '+_dom.name+'</div>'+
+      (function(){
+        var _domOpts=(_c.domains||[]).map(function(d,idx){
+          return '<option value="'+idx+'"'+(_di===idx?' selected':'')+'>'+d.name+'</option>';
+        }).join('');
+        return '<div class="field"><label>Domein</label><select id="dd-domain">'+_domOpts+'</select></div>';
+      })()+
       '<div class="field"><label>Documentnaam *</label><input id="dd-name" value="'+(_existingDoc.name||'').replace(/"/g,'&quot;')+'" placeholder="Bijv. Information Security Policy v1.0" autofocus /></div>'+
       '<div class="field"><label>Link (optioneel)</label><input id="dd-link" value="'+(_existingDoc.link||'').replace(/"/g,'&quot;')+'" placeholder="https://sharepoint.com/..." /></div>'+
       '<div class="field-row">'+
@@ -2772,10 +2794,25 @@ function statusColor(s){
   return 'background:#F0F4F8;color:#5A6B7E;';
 }
 
+function soaImplColor(s){
+  if(s==='implemented')return 'background:#E1F5EE;color:#0F6E56;';
+  if(s==='in_progress')return 'background:#FFF3E0;color:#B45309;';
+  if(s==='planned')return 'background:#EBF2FF;color:#1a6bbd;';
+  return 'background:#F0F4F8;color:#5A6B7E;';
+}
+
 function updateStatusColor(sel){
   var s=sel.value;
   if(s==='compliant'){sel.style.background='#E1F5EE';sel.style.color='#0F6E56';}
   else if(s==='gap'){sel.style.background='#FEE2E2';sel.style.color='#DC2626';}
+  else{sel.style.background='#F0F4F8';sel.style.color='#5A6B7E';}
+}
+
+function updateSoaImplColor(sel){
+  var s=sel.value;
+  if(s==='implemented'){sel.style.background='#E1F5EE';sel.style.color='#0F6E56';}
+  else if(s==='in_progress'){sel.style.background='#FFF3E0';sel.style.color='#B45309';}
+  else if(s==='planned'){sel.style.background='#EBF2FF';sel.style.color='#1a6bbd';}
   else{sel.style.background='#F0F4F8';sel.style.color='#5A6B7E';}
 }
 
