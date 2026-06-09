@@ -1912,7 +1912,7 @@ function exportSoaExcel(){
       dr.push(sc(COLS[5+ri]+rowNum,(ctrl.applicable&&reason===r)?'X':'\u00a0',13));
     });
     dr.push(sc('J'+rowNum,ctrl.applicable?'':(ctrl.soaExclusion||''),5)); // J: exclusion
-    dr.push(sc('K'+rowNum,implDoc,7));        // K: impl doc, grey
+    dr.push(sc('K'+rowNum,implDoc,5));        // K: impl doc, grey
     // L/M removed
     rows.push('<row r="'+rowNum+'" ht="25" customHeight="1">'+dr.join('')+'</row>');
     rowNum++;
@@ -2086,6 +2086,43 @@ function exportSoaExcel(){
     +'<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
     +'</Types>';
 
+  // ── Comments voor RA/RE/BP/CA headers ───────────────────────────
+  // Single comment on F3 (merged header cell) explaining all four reason codes
+  var commentsXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    +'<comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    +'<authors><author>Risguard</author></authors>'
+    +'<commentList>'
+    +'<comment ref="F3" authorId="0"><text><r><t>RA = Risk Assessment: control is van toepassing op basis van een risicoanalyse.&#10;RE = Regulatory / Legal: control is verplicht op basis van wet- of regelgeving.&#10;BP = Best Practice: control wordt toegepast als algemeen erkende best practice.&#10;CA = Contractual: control is vereist op basis van contractuele verplichtingen.</t></r></text></comment>'
+    +'</commentList></comments>';
+
+  var vmlXml='<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">'
+    +'<o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="1"/></o:shapelayout>'
+    +'<v:shapetype id="_x0000_t202" coordsize="21600,21600" o:spt="202" path="m,l,21600r21600,l21600,xe"><v:stroke joinstyle="miter"/><v:path gradientshapeok="t" o:connecttype="rect"/></v:shapetype>'
+    +'<v:shape id="_x0000_s1025" type="#_x0000_t202" style="position:absolute;margin-left:59.25pt;margin-top:1.5pt;width:240pt;height:72pt;z-index:1;visibility:hidden" fillcolor="#FFFFE1" o:insetmode="auto">'
+    +'<v:fill color2="#FFFFE1"/><v:shadow on="t" color="black" obscured="t"/><v:path o:connecttype="none"/>'
+    +'<v:textbox style="mso-direction-alt:auto"><div style="text-align:left"></div></v:textbox>'
+    +'<x:ClientData ObjectType="Note"><x:MoveWithCells/><x:SizeWithCells/>'
+    +'<x:Anchor>5,0,2,0,9,3,7,2</x:Anchor>'
+    +'<x:AutoFill>False</x:AutoFill><x:Row>2</x:Row><x:Column>5</x:Column>'
+    +'</x:ClientData></v:shape>'
+    +'</xml>';
+
+  // Add comments relationship to sheet1
+  var sheet1Rels='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    +'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    +'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/>'
+    +'<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/>'
+    +'</Relationships>';
+
+  // Add legacyDrawing reference to ws1
+  ws1=ws1.replace('</worksheet>','<legacyDrawing r:id="rId2"/></worksheet>');
+
+  // Update content types
+  ctypes=ctypes.replace('</Types>',
+    '<Override PartName="/xl/comments1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml"/>'
+    +'<Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/>'
+    +'</Types>');
+
   var blob=new Blob([_zip([
     {n:'[Content_Types].xml',d:ctypes},
     {n:'_rels/.rels',d:appRels},
@@ -2094,6 +2131,9 @@ function exportSoaExcel(){
     {n:'xl/styles.xml',d:styleXml()},
     {n:'xl/sharedStrings.xml',d:ssXml},
     {n:'xl/worksheets/sheet1.xml',d:ws1},
+    {n:'xl/worksheets/_rels/sheet1.xml.rels',d:sheet1Rels},
+    {n:'xl/comments1.xml',d:commentsXml},
+    {n:'xl/drawings/vmlDrawing1.vml',d:vmlXml},
   ])],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   var a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
