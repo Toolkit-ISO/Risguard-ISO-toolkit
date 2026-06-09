@@ -293,6 +293,7 @@ tbody tr:hover td{background:#F7FAFD;}
   <div class="topbar">
     <div id="topbar-bc" class="bc"></div>
     <div style="display:flex;align-items:center;gap:12px;margin-left:auto">
+      <div id="sp-sync-badge"></div>
       <div id="user-badge"></div>
       <div id="topbar-act" class="top-act"></div>
     </div>
@@ -375,6 +376,8 @@ function hideLoginScreen(){
   setTimeout(function(){
     render();
     renderUserBadge();
+    spUpdateBadge();
+    loadDBAsync();
   },100);
 }
 function renderUserBadge(){
@@ -606,12 +609,142 @@ var DB={impl:[],audit:[],gap:[]};
 var ST={module:'impl',view:'clients',sel:null,tab:'domains',modal:null,mdata:null,search:'',fSt:'',fCat:'',expandedPhase:null,auditTab:'clausules',auditGrp:'A.5',gapTab:'clausules',gapGrp:'A.5',interviewGrp:'A.5',interviewSubTab:'annexa',soaGrp:'all',openNotes:{},openDomains:{}};
 var importFiles=[];
 
-function loadDB(){
-  try{var d=localStorage.getItem('rg_v7');if(d)DB=JSON.parse(d);}catch(e){}
-  DB.impl=DB.impl||[]; DB.audit=DB.audit||[]; DB.gap=DB.gap||[];
-  // Migrate: re-run detectMeta if control is blank or old group format
+// ═══════════════════════════════════════════
+// SHAREPOINT LISTS SYNC
+// ═══════════════════════════════════════════
+var SP_SYNC = {
+  siteId: null,
+  listId: null,
+  itemId: null,
+  lastVersion: null,
+  pollTimer: null,
+  syncing: false,
+  online: false,
+  POLL_INTERVAL: 10000,
+  LIST_NAME: 'RG_ToolkitData'
+};
+
+function spGetSiteId(){
+  if(SP_SYNC.siteId) return Promise.resolve(SP_SYNC.siteId);
+  return acquireToken().then(function(t){
+    return fetch('https://graph.microsoft.com/v1.0/sites/root',{headers:{Authorization:'Bearer '+t}}).then(function(r){return r.json();});
+  }).then(function(s){
+    if(s.id){SP_SYNC.siteId=s.id;return s.id;}
+    throw new Error('Cannot resolve site: '+(s.error&&s.error.message||JSON.stringify(s)));
+  });
+}
+
+function spEnsureList(){
+  if(SP_SYNC.listId) return Promise.resolve(SP_SYNC.listId);
+  return spGetSiteId().then(function(siteId){
+    return acquireToken().then(function(t){
+      return fetch("https://graph.microsoft.com/v1.0/sites/"+siteId+"/lists?$filter=displayName eq '"+SP_SYNC.LIST_NAME+"'&$select=id",{headers:{Authorization:'Bearer '+t}}).then(function(r){return r.json();});
+    }).then(function(res){
+      if(res.value&&res.value.length>0){SP_SYNC.listId=res.value[0].id;return SP_SYNC.listId;}
+      return acquireToken().then(function(t){
+        return fetch('https://graph.microsoft.com/v1.0/sites/'+siteId+'/lists',{
+          method:'POST',
+          headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},
+          body:JSON.stringify({displayName:SP_SYNC.LIST_NAME,columns:[{name:'ToolkitData',text:{}}],list:{template:'genericList'}})
+        }).then(function(r){return r.json();});
+      }).then(function(lst){
+        if(lst.id){SP_SYNC.listId=lst.id;return lst.id;}
+        throw new Error('Cannot create list: '+(lst.error&&lst.error.message||JSON.stringify(lst)));
+      });
+    });
+  });
+}
+
+function spEnsureItem(){
+  if(SP_SYNC.itemId) return Promise.resolve(SP_SYNC.itemId);
+  return spEnsureList().then(function(){
+    return acquireToken().then(function(t){
+      return fetch('https://graph.microsoft.com/v1.0/sites/'+SP_SYNC.siteId+'/lists/'+SP_SYNC.listId+'/items?$select=id',{headers:{Authorization:'Bearer '+t}}).then(function(r){return r.json();});
+    }).then(function(res){
+      if(res.value&&res.value.length>0){SP_SYNC.itemId=res.value[0].id;return SP_SYNC.itemId;}
+      return acquireToken().then(function(t){
+        return fetch('https://graph.microsoft.com/v1.0/sites/'+SP_SYNC.siteId+'/lists/'+SP_SYNC.listId+'/items',{
+          method:'POST',
+          headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},
+          body:JSON.stringify({fields:{ToolkitData:'{"impl":[],"audit":[],"gap":[]}'}}
+        )}).then(function(r){return r.json();});
+      }).then(function(item){
+        if(item.id){SP_SYNC.itemId=item.id;return item.id;}
+        throw new Error('Cannot create item: '+(item.error&&item.error.message||JSON.stringify(item)));
+      });
+    });
+  });
+}
+
+function spReadDB(){
+  return spEnsureItem().then(function(){
+    return acquireToken().then(function(t){
+      return fetch('https://graph.microsoft.com/v1.0/sites/'+SP_SYNC.siteId+'/lists/'+SP_SYNC.listId+'/items/'+SP_SYNC.itemId+'?$expand=fields($select=ToolkitData)&$select=id,lastModifiedDateTime',{headers:{Authorization:'Bearer '+t}}).then(function(r){return r.json();});
+    }).then(function(item){
+      var ts=item.lastModifiedDateTime||null;
+      var raw=item.fields&&item.fields.ToolkitData?item.fields.ToolkitData:'{}';
+      var data;try{data=JSON.parse(raw);}catch(e){data={};}
+      data.impl=data.impl||[];data.audit=data.audit||[];data.gap=data.gap||[];
+      return {data:data,version:ts};
+    });
+  });
+}
+
+function spWriteDB(db){
+  return spEnsureItem().then(function(){
+    return acquireToken().then(function(t){
+      return fetch('https://graph.microsoft.com/v1.0/sites/'+SP_SYNC.siteId+'/lists/'+SP_SYNC.listId+'/items/'+SP_SYNC.itemId+'/fields',{
+        method:'PATCH',
+        headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},
+        body:JSON.stringify({ToolkitData:JSON.stringify(db)})
+      }).then(function(r){return r.json();});
+    }).then(function(res){
+      if(res.error)throw new Error(res.error.message);
+      return res;
+    });
+  });
+}
+
+function spUpdateBadge(){
+  var el=document.getElementById('sp-sync-badge');
+  if(!el)return;
+  if(SP_SYNC.online){
+    el.innerHTML='<span style="color:#1D9E75;font-size:10px;display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:#1D9E75;display:inline-block"></span>Live sync</span>';
+  } else {
+    el.innerHTML='<span style="color:#BA7517;font-size:10px;display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:#BA7517;display:inline-block"></span>Lokaal</span>';
+  }
+}
+
+function spPoll(){
+  if(!AUTH.ready||!AUTH.user||SP_SYNC.syncing)return;
+  spEnsureItem().then(function(){
+    return acquireToken().then(function(t){
+      return fetch('https://graph.microsoft.com/v1.0/sites/'+SP_SYNC.siteId+'/lists/'+SP_SYNC.listId+'/items/'+SP_SYNC.itemId+'?$select=lastModifiedDateTime',{headers:{Authorization:'Bearer '+t}}).then(function(r){return r.json();});
+    });
+  }).then(function(item){
+    var ts=item.lastModifiedDateTime||null;
+    if(ts&&ts!==SP_SYNC.lastVersion){
+      SP_SYNC.lastVersion=ts;
+      return spReadDB().then(function(result){
+        migrateDB(result.data);
+        DB=result.data;
+        localStorage.setItem('rg_v7',JSON.stringify(DB));
+        SP_SYNC.lastVersion=result.version;
+        render();
+      });
+    }
+  }).catch(function(e){console.warn('SP poll error:',e);});
+}
+
+function spStartPolling(){
+  if(SP_SYNC.pollTimer)clearInterval(SP_SYNC.pollTimer);
+  SP_SYNC.pollTimer=setInterval(spPoll,SP_SYNC.POLL_INTERVAL);
+}
+
+function migrateDB(data){
+  data.impl=data.impl||[];data.audit=data.audit||[];data.gap=data.gap||[];
   var SPECIFIC_RE=/^(A\.\d+\.\d|Clause \d)/;
-  DB.impl.forEach(function(c){
+  (data.impl||[]).forEach(function(c){
     (c.docs||[]).forEach(function(doc){
       if(!doc.name)return;
       if(!doc.control||!SPECIFIC_RE.test(doc.control)){
@@ -621,9 +754,45 @@ function loadDB(){
       }
     });
   });
-
 }
-function saveDB(){localStorage.setItem('rg_v7',JSON.stringify(DB));}
+
+function loadDBAsync(){
+  try{var d=localStorage.getItem('rg_v7');if(d){var parsed=JSON.parse(d);migrateDB(parsed);DB=parsed;}}catch(e){}
+  if(!AUTH.user)return;
+  SP_SYNC.syncing=true;
+  spReadDB().then(function(result){
+    SP_SYNC.online=true;
+    SP_SYNC.lastVersion=result.version;
+    spUpdateBadge();
+    var spHasData=(result.data.impl.length>0||result.data.audit.length>0||result.data.gap.length>0);
+    var localHasData=(DB.impl.length>0||DB.audit.length>0||DB.gap.length>0);
+    if(spHasData){
+      DB=result.data;
+      localStorage.setItem('rg_v7',JSON.stringify(DB));
+    } else if(localHasData){
+      spWriteDB(DB).then(function(){return spReadDB();}).then(function(r){SP_SYNC.lastVersion=r.version;}).catch(function(e){console.warn('SP upload local data:',e);});
+    }
+    render();
+    spStartPolling();
+  }).catch(function(e){
+    console.warn('SP load failed, using localStorage:',e);
+    SP_SYNC.online=false;
+    spUpdateBadge();
+  }).finally(function(){SP_SYNC.syncing=false;});
+}
+
+function loadDB(){
+  try{var d=localStorage.getItem('rg_v7');if(d){var parsed=JSON.parse(d);migrateDB(parsed);DB=parsed;}}catch(e){}
+  migrateDB(DB);
+}
+
+function saveDB(){
+  localStorage.setItem('rg_v7',JSON.stringify(DB));
+  if(SP_SYNC.online&&AUTH.user){
+    SP_SYNC.syncing=true;
+    spWriteDB(DB).then(function(){return spReadDB();}).then(function(r){SP_SYNC.lastVersion=r.version;}).catch(function(e){console.warn('SP save failed:',e);}).finally(function(){SP_SYNC.syncing=false;});
+  }
+}
 function clients(){return DB[ST.module]||[];}
 
 function ini(n){return n.split(' ').filter(Boolean).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2)||'?';}
