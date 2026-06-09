@@ -1863,11 +1863,13 @@ function exportSoaExcel(){
   var hdrs=['Control\nRef','Control Name','Control description','Applicable','Implementation\nStatus','RA','RE','BP','CA','Reason for Exclusion','Implementing Document\n(Policy / Procedure / Technical control)'];
   var r3=[];
   hdrs.forEach(function(h,ci){r3.push(sc(COLS[ci]+'3',h,3));});
-  // Merge F3:I3 for "Reason for Applicability" header
-  r3[5]=sc('F3','Reason for\nApplicability',3);
-  r3[6]=ec('G3',3);r3[7]=ec('H3',3);r3[8]=ec('I3',3);
+  // Individual RA/RE/BP/CA header cells (no merge) so comments work
+  r3[5]=sc('F3','RA',3);
+  r3[6]=sc('G3','RE',3);
+  r3[7]=sc('H3','BP',3);
+  r3[8]=sc('I3','CA',3);
   rows.push('<row r="3" ht="42" customHeight="1">'+r3.join('')+'</row>');
-  addMerge(3,5,3,8);
+  // F3:I3 merge removed - individual cells for RA/RE/BP/CA with comments
 
   // Data rows starting at row 4
   var rowNum=4;
@@ -2087,24 +2089,36 @@ function exportSoaExcel(){
     +'</Types>';
 
   // ── Comments voor RA/RE/BP/CA headers ───────────────────────────
-  // Single comment on F3 (merged header cell) explaining all four reason codes
+  // Individual comments per RA/RE/BP/CA header cell
+  var reasonComments=[
+    {ref:'F3',col:5,text:'RA = Risk Assessment\nControl is van toepassing op basis van een uitgevoerde risicoanalyse.'},
+    {ref:'G3',col:6,text:'RE = Regulatory / Legal\nControl is verplicht op basis van wet- of regelgeving.'},
+    {ref:'H3',col:7,text:'BP = Best Practice\nControl wordt toegepast als algemeen erkende best practice.'},
+    {ref:'I3',col:8,text:'CA = Contractual\nControl is vereist op basis van contractuele verplichtingen.'},
+  ];
   var commentsXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     +'<comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
     +'<authors><author>Risguard</author></authors>'
     +'<commentList>'
-    +'<comment ref="F3" authorId="0"><text><r><t>RA = Risk Assessment: control is van toepassing op basis van een risicoanalyse.&#10;RE = Regulatory / Legal: control is verplicht op basis van wet- of regelgeving.&#10;BP = Best Practice: control wordt toegepast als algemeen erkende best practice.&#10;CA = Contractual: control is vereist op basis van contractuele verplichtingen.</t></r></text></comment>'
+    +reasonComments.map(function(rc){
+      return '<comment ref="'+rc.ref+'" authorId="0"><text><r><t xml:space="preserve">'+rc.text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</t></r></text></comment>';
+    }).join('')
     +'</commentList></comments>';
 
   var vmlXml='<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">'
     +'<o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="1"/></o:shapelayout>'
     +'<v:shapetype id="_x0000_t202" coordsize="21600,21600" o:spt="202" path="m,l,21600r21600,l21600,xe"><v:stroke joinstyle="miter"/><v:path gradientshapeok="t" o:connecttype="rect"/></v:shapetype>'
-    +'<v:shape id="_x0000_s1025" type="#_x0000_t202" style="position:absolute;margin-left:59.25pt;margin-top:1.5pt;width:240pt;height:72pt;z-index:1;visibility:hidden" fillcolor="#FFFFE1" o:insetmode="auto">'
-    +'<v:fill color2="#FFFFE1"/><v:shadow on="t" color="black" obscured="t"/><v:path o:connecttype="none"/>'
-    +'<v:textbox style="mso-direction-alt:auto"><div style="text-align:left"></div></v:textbox>'
-    +'<x:ClientData ObjectType="Note"><x:MoveWithCells/><x:SizeWithCells/>'
-    +'<x:Anchor>5,0,2,0,9,3,7,2</x:Anchor>'
-    +'<x:AutoFill>False</x:AutoFill><x:Row>2</x:Row><x:Column>5</x:Column>'
-    +'</x:ClientData></v:shape>'
+    +reasonComments.map(function(rc,i){
+      return '<v:shape id="_x0000_s'+(1025+i)+'" type="#_x0000_t202"'
+        +' style="position:absolute;margin-left:59.25pt;margin-top:1.5pt;width:180pt;height:52pt;z-index:'+(i+1)+';visibility:hidden"'
+        +' fillcolor="#FFFFE1" o:insetmode="auto">'
+        +'<v:fill color2="#FFFFE1"/><v:shadow on="t" color="black" obscured="t"/><v:path o:connecttype="none"/>'
+        +'<v:textbox style="mso-direction-alt:auto"><div style="text-align:left"></div></v:textbox>'
+        +'<x:ClientData ObjectType="Note"><x:MoveWithCells/><x:SizeWithCells/>'
+        +'<x:Anchor>'+rc.col+',0,2,0,'+(rc.col+3)+',3,5,2</x:Anchor>'
+        +'<x:AutoFill>False</x:AutoFill><x:Row>2</x:Row><x:Column>'+rc.col+'</x:Column>'
+        +'</x:ClientData></v:shape>';
+    }).join('')
     +'</xml>';
 
   // Add comments relationship to sheet1
