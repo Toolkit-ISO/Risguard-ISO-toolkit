@@ -317,7 +317,7 @@ var MSAL_CONFIG={
   },
   cache:{cacheLocation:'sessionStorage',storeAuthStateInCookie:false}
 };
-var GRAPH_SCOPES=['User.Read','User.Read.All','Sites.ReadWrite.All','Files.ReadWrite.All'];
+var GRAPH_SCOPES=['User.Read','Sites.ReadWrite.All','Files.ReadWrite.All'];
 var msalInstance=null;
 var AUTH={user:null,token:null,ready:false};
 
@@ -2868,7 +2868,7 @@ function fetchOrgUsers(){
   if(SP_USERS_CACHE && (Date.now()-SP_USERS_CACHE.ts < 5*60*1000)){
     return Promise.resolve(SP_USERS_CACHE.users);
   }
-  return acquireToken().then(function(token){
+  return msalInstance.acquireTokenSilent({scopes:['User.Read.All'],account:AUTH.user}).then(function(r){return r.accessToken;}).catch(function(){return acquireToken();}).then(function(token){
     return fetch('https://graph.microsoft.com/v1.0/users?$select=id,displayName,mail,userPrincipalName&$top=100&$filter=accountEnabled eq true',{
       headers:{Authorization:'Bearer '+token}
     }).then(function(r){return r.json();});
