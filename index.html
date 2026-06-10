@@ -606,7 +606,7 @@ function aDesc(id){return ANNEX_CTRL_DESC['A.'+id]||ANNEX_CTRL_DESC[id]||{};}
 
 var AUDIT_STATUSES=['open','compliant','ofi','minor','major'];
 var DB={impl:[],audit:[],gap:[]};
-var ST={module:'impl',view:'clients',sel:null,tab:'domains',modal:null,mdata:null,search:'',fSt:'',fCat:'',expandedPhase:null,auditTab:'clausules',auditGrp:'A.5',gapTab:'clausules',gapGrp:'A.5',interviewGrp:'A.5',interviewSubTab:'annexa',soaGrp:'all',openNotes:{},openDomains:{}};
+var ST={module:'impl',view:'clients',sel:null,tab:'domains',modal:null,mdata:null,search:'',fSt:'',fCat:'',expandedPhase:null,auditTab:'clausules',auditGrp:'A.5',gapTab:'clausules',gapGrp:'A.5',gapSearch:'',gapFStatus:'',interviewGrp:'A.5',interviewSubTab:'annexa',soaGrp:'all',openNotes:{},openDomains:{}};
 var importFiles=[];
 
 // ═══════════════════════════════════════════
@@ -1201,11 +1201,77 @@ function renderClients(){
     var lbl=ST.module==='impl'?'implementatietrajecten':ST.module==='audit'?'audit trajecten':'gap assessments';
     return '<div class="empty"><div class="empty-icon">&#9672;</div><div class="empty-title">Nog geen klanten</div><div class="empty-sub">Voeg een klant toe om te beginnen met '+lbl+'.</div><button class="btn btn-primary" onclick="openModal(\'addClient\')">+ Eerste klant toevoegen</button></div>';
   }
-  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.75rem"><div><div style="font-size:20px;font-weight:600">'+( ST.module==='impl'?'Implementatie':ST.module==='audit'?'Internal Audit':'Gap Assessment')+'</div><div style="font-size:13px;color:var(--text-muted);margin-top:3px">'+cl.length+' klant'+(cl.length!==1?'en':'')+'</div></div></div><div class="client-grid">';
+
+  // ── Intern dashboard overzicht (alle modules) ────────────────────
+  var allImpl=DB.impl||[];var allAudit=DB.audit||[];var allGap=DB.gap||[];
+  var modTitle=ST.module==='impl'?'Implementatie':ST.module==='audit'?'Internal Audit':'Gap Assessment';
+  var h='<div style="margin-bottom:1.75rem">';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">';
+  h+='<div><div style="font-size:20px;font-weight:600">'+modTitle+'</div>';
+  h+='<div style="font-size:13px;color:var(--text-muted);margin-top:3px">'+cl.length+' klant'+(cl.length!==1?'en':'')+' &middot; '+new Date().toLocaleDateString('nl-NL',{day:'2-digit',month:'long',year:'numeric'})+'</div></div>';
+  h+='</div>';
+
+  // Totaaloverzicht alle modules
+  if(allImpl.length||allAudit.length||allGap.length){
+    h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:1.25rem">';
+    // Impl stats
+    var totalDocs=allImpl.reduce(function(s,c){return s+((c.domains||[]).reduce(function(a,d){return a+(d.docs||[]).length;},0));},0);
+    var approvedDocs=allImpl.reduce(function(s,c){return s+((c.domains||[]).reduce(function(a,d){return a+(d.docs||[]).filter(function(doc){return doc.status==='approved';}).length;},0));},0);
+    h+='<div style="flex:1;min-width:160px;background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;box-shadow:var(--sh)">';
+    h+='<div style="font-size:10px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">&#128196; Implementatie</div>';
+    h+='<div style="font-size:22px;font-weight:700;color:var(--text)">'+allImpl.length+'</div><div style="font-size:11px;color:var(--text-muted)">klanten &middot; '+approvedDocs+'/'+totalDocs+' docs goedgekeurd</div>';
+    h+='</div>';
+    // Gap stats
+    var gapClients=allGap.length;var gapDone=allGap.filter(function(c){var gc=c.gapControls||[];var ap=gc.filter(function(x){return x.applicable;});return ap.length&&ap.filter(function(x){return x.status&&x.status!=='open';}).length===ap.length;}).length;
+    h+='<div style="flex:1;min-width:160px;background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;box-shadow:var(--sh)">';
+    h+='<div style="font-size:10px;font-weight:700;color:#0F6E56;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">&#128270; Gap Assessment</div>';
+    h+='<div style="font-size:22px;font-weight:700;color:var(--text)">'+gapClients+'</div><div style="font-size:11px;color:var(--text-muted)">klanten &middot; '+gapDone+' volledig beoordeeld</div>';
+    h+='</div>';
+    // Audit stats
+    var auditClients=allAudit.length;var openFindings=allAudit.reduce(function(s,c){return s+(c.findings||[]).filter(function(f){return f.status!=='compliant';}).length;},0);
+    h+='<div style="flex:1;min-width:160px;background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;box-shadow:var(--sh)">';
+    h+='<div style="font-size:10px;font-weight:700;color:#7C3AED;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">&#128203; Internal Audit</div>';
+    h+='<div style="font-size:22px;font-weight:700;color:var(--text)">'+auditClients+'</div><div style="font-size:11px;color:var(--text-muted)">klanten &middot; '+openFindings+' open bevindingen</div>';
+    h+='</div>';
+    h+='</div>';
+  }
+  h+='</div>';
+
+  // ── Klantkaarten ────────────────────────────────────────────────
+  h+='<div class="client-grid">';
   cl.forEach(function(c,i){
-    var p=clientPct(c);var docs=c.docs||[];var apr=docs.filter(function(d){return d.status==='approved';}).length;
-    var sublbl=ST.module==='impl'?(apr+'/'+docs.length+' goedgekeurd'):ST.module==='audit'?( (c.annexA||[]).filter(function(x){return x.applicable;}).length+' controls applicable'):((c.findings||[]).length+' bevindingen');
-    h+='<div class="client-card" onclick="openClient('+i+')">'+
+    var p=clientPct(c);
+    // Berekening per module
+    var sublbl,detailHtml='';
+    if(ST.module==='impl'){
+      var allDomDocs=(c.domains||[]).reduce(function(a,d){return a.concat(d.docs||[]);}, []);
+      var apr=allDomDocs.filter(function(d){return d.status==='approved';}).length;
+      sublbl=apr+'/'+allDomDocs.length+' goedgekeurd';
+      // Preparer/reviewer mini-overzicht
+      var preparers=[],reviewers=[];
+      allDomDocs.forEach(function(d){if(d.preparerName&&preparers.indexOf(d.preparerName)<0)preparers.push(d.preparerName);if(d.reviewerName&&reviewers.indexOf(d.reviewerName)<0)reviewers.push(d.reviewerName);});
+      if(preparers.length||reviewers.length){
+        detailHtml='<div style="margin-top:6px;font-size:10px;color:var(--text-muted);line-height:1.5">';
+        if(preparers.length)detailHtml+='<span title="Preparers">&#9998; '+preparers.map(function(n){return n.split(' ')[0];}).join(', ')+'</span> ';
+        if(reviewers.length)detailHtml+='<span title="Reviewers">&#10003; '+reviewers.map(function(n){return n.split(' ')[0];}).join(', ')+'</span>';
+        detailHtml+='</div>';
+      }
+    } else if(ST.module==='audit'){
+      var applicable=(c.annexA||[]).filter(function(x){return x.applicable;}).length;
+      var openF=(c.findings||[]).filter(function(f){return f.status!=='compliant';}).length;
+      sublbl=applicable+' controls applicable';
+      if(openF)detailHtml='<div style="margin-top:4px;font-size:10px;color:#DC2626">&#9654; '+openF+' open bevindingen</div>';
+    } else {
+      var gc=c.gapControls||[];var ap=gc.filter(function(x){return x.applicable;});
+      var gapCount=ap.filter(function(x){return x.status==='gap';}).length;
+      var complCount=ap.filter(function(x){return x.status==='compliant';}).length;
+      sublbl=(c.findings||[]).length+' bevindingen';
+      if(ap.length)detailHtml='<div style="margin-top:4px;font-size:10px;color:var(--text-muted)"><span style="color:#DC2626">'+gapCount+' GAP</span> &middot; <span style="color:#0F6E56">'+complCount+' Compliant</span></div>';
+    }
+    // Owner badge
+    var ownerBadge='';
+    if(c.ownerName){var ownerIni=c.ownerName.split(' ').map(function(n){return n[0];}).join('').substring(0,2).toUpperCase();var isMe=AUTH.user&&c.owner===AUTH.user.localAccountId;ownerBadge='<div title="Aangemaakt door: '+c.ownerName+'" style="position:absolute;bottom:10px;right:12px;width:22px;height:22px;border-radius:50%;background:'+(isMe?'var(--blue)':'#9CA3AF')+';color:white;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700">'+ownerIni+'</div>';}
+    h+='<div class="client-card" onclick="openClient('+i+')" style="position:relative">'+
       '<button class="card-del" onclick="event.stopPropagation();delClient('+i+')">&#x2715;</button>'+
       '<button class="card-menu" onclick="event.stopPropagation();toggleCardMenu('+i+',this)">&#8943;</button>'+
       '<div class="card-dropdown" id="cdm-'+i+'" onclick="event.stopPropagation()">'+
@@ -1213,7 +1279,8 @@ function renderClients(){
         '<div class="dd-divider"></div>'+
         '<button class="dd-next" onclick="closeCardMenus();startNextPhase('+i+')">&#8594;&nbsp; Starten volgende fase</button>'+
       '</div>'+
-      '<div class="c-avatar">'+ini(c.name)+'</div><div class="c-name">'+c.name+'</div><div class="c-phase">'+(c.phase||'Fase niet ingesteld')+'</div><div class="pbar"><div class="pbar-fill" style="width:'+p+'%"></div></div><div class="pbar-label">'+sublbl+' &middot; '+p+'%</div><div class="open-hint">openen &rarr;</div></div>';
+      ownerBadge+
+      '<div class="c-avatar">'+ini(c.name)+'</div><div class="c-name">'+c.name+'</div><div class="c-phase">'+(c.phase||'Fase niet ingesteld')+'</div><div class="pbar"><div class="pbar-fill" style="width:'+p+'%"></div></div><div class="pbar-label">'+sublbl+' &middot; '+p+'%</div>'+detailHtml+'<div class="open-hint">openen &rarr;</div></div>';
   });
   return h+'</div>';
 }
@@ -2852,7 +2919,7 @@ function goHome(){ST.view='clients';ST.sel=null;render();}
 function updatePhase(v){var c=clients()[ST.sel];if(!c)return;c.phase=v;saveDB();}
 
 function openClient(i){
-  ST.sel=i;ST.view='detail';ST.tab='domains';ST.auditTab='clausules';ST.auditGrp='A.5';ST.gapTab='clausules';ST.gapGrp='A.5';ST.interviewGrp='A.5';ST.interviewSubTab='annexa';ST.search='';ST.fSt='';ST.fCat='';ST.expandedPhase=null;ST.openNotes={};ST.openDomains={};render();
+  ST.sel=i;ST.view='detail';ST.tab='domains';ST.auditTab='clausules';ST.auditGrp='A.5';ST.gapTab='clausules';ST.gapGrp='A.5';ST.gapSearch='';ST.gapFStatus='';ST.interviewGrp='A.5';ST.interviewSubTab='annexa';ST.search='';ST.fSt='';ST.fCat='';ST.expandedPhase=null;ST.openNotes={};ST.openDomains={};render();
   if(ST.module==='impl')attachSearchEvents();
 }
 
@@ -3517,7 +3584,7 @@ function renderGapDetail(){
     var groups=['A.5','A.6','A.7','A.8'];
     h+='<div style="display:flex;gap:4px;margin-bottom:1.25rem;flex-wrap:wrap">';
     groups.forEach(function(g){
-      h+='<button onclick="ST.gapGrp=\''+g+'\';renderGapGrp()" class="btn btn-sm'+(ST.gapGrp===g?' btn-primary':'')+'" style="font-size:12px">'+g+'</button>';
+      h+='<button onclick="ST.gapGrp=\''+g+'\';ST.gapSearch=\'\';ST.gapFStatus=\'\';renderGapGrp()" class="btn btn-sm'+(ST.gapGrp===g?' btn-primary':'')+'" style="font-size:12px">'+g+'</button>';
     });
     h+='</div><div id="gap-grp-content">'+buildGapGrp(c)+'</div>';
   } else {
@@ -3526,7 +3593,7 @@ function renderGapDetail(){
   return h;
 }
 
-function setGapTab(t){if(t==='findings')t='notes';ST.gapTab=t;render();}
+function setGapTab(t){if(t==='findings')t='notes';ST.gapTab=t;ST.gapSearch='';ST.gapFStatus='';render();}
 
 function renderGapClausules(c){
   var groups=[{label:'Clause 4 \u2014 Context',from:'4.',to:'5.'},{label:'Clause 5 \u2014 Leadership',from:'5.',to:'6.'},{label:'Clause 6 \u2014 Planning',from:'6.',to:'7.'},{label:'Clause 7 \u2014 Support',from:'7.',to:'8.'},{label:'Clause 8 \u2014 Operation',from:'8.',to:'9.'},{label:'Clause 9 \u2014 Performance evaluation',from:'9.',to:'10.'},{label:'Clause 10 \u2014 Improvement',from:'10.',to:'99.'}];
@@ -3584,21 +3651,45 @@ function renderGapFindings(c){
 
 function buildGapGrp(c){
   var rows=c.gapControls.filter(function(x){return x.group===ST.gapGrp;});
-  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:13px;color:var(--text-muted)">'+rows.filter(function(x){return x.applicable;}).length+' applicable</div><button class="btn btn-sm" onclick="toggleAllGapApplicable()">Alles aan/uit</button></div>';
-  h+='<div class="tbl-wrap"><table><thead><tr><th style="width:55px">ID</th><th>Control</th><th style="width:80px">Applicable</th><th>Huidige situatie</th><th>Gewenste situatie</th><th>Gap</th><th style="width:90px">Prioriteit</th><th style="width:90px">Status</th><th></th></tr></thead><tbody>';
-  rows.forEach(function(ctrl){
+  // Zoek/filter
+  var fStatus=ST.gapFStatus||'';
+  var fSearch=(ST.gapSearch||'').toLowerCase();
+  var filteredRows=rows.slice();
+  if(fSearch)filteredRows=filteredRows.filter(function(x){return x.id.toLowerCase().indexOf(fSearch)>=0||x.name.toLowerCase().indexOf(fSearch)>=0;});
+  if(fStatus==='applicable')filteredRows=filteredRows.filter(function(x){return x.applicable;});
+  else if(fStatus==='gap')filteredRows=filteredRows.filter(function(x){return x.applicable&&x.status==='gap';});
+  else if(fStatus==='compliant')filteredRows=filteredRows.filter(function(x){return x.applicable&&x.status==='compliant';});
+  else if(fStatus==='open')filteredRows=filteredRows.filter(function(x){return x.applicable&&(!x.status||x.status==='');});
+
+  var h='<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center">';
+  h+='<input type="text" placeholder="\u{1F50D} Zoeken op ID of naam..." value="'+(ST.gapSearch||'').replace(/"/g,'&quot;')+'" oninput="ST.gapSearch=this.value;renderGapGrp()" style="flex:1;min-width:160px;padding:5px 10px;font-size:12px;border:1px solid var(--border);border-radius:6px;font-family:DM Sans,sans-serif" />';
+  h+='<select onchange="ST.gapFStatus=this.value;renderGapGrp()" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-family:DM Sans,sans-serif">';
+  h+='<option value=""'+(fStatus===''?' selected':'')+'>Alle</option>';
+  h+='<option value="applicable"'+(fStatus==='applicable'?' selected':'')+'>Applicable</option>';
+  h+='<option value="gap"'+(fStatus==='gap'?' selected':'')+'>GAP</option>';
+  h+='<option value="compliant"'+(fStatus==='compliant'?' selected':'')+'>Compliant</option>';
+  h+='<option value="open"'+(fStatus==='open'?' selected':'')+'>Open</option>';
+  h+='</select>';
+  h+='<button class="btn btn-sm" onclick="toggleAllGapApplicable()">Alles aan/uit</button>';
+  h+='</div>';
+  h+='<div id="gap-bulk-bar" style="display:none;background:#EBF2FF;border:1px solid #B5D4F4;border-radius:6px;padding:8px 12px;margin-bottom:10px;flex-wrap:wrap;align-items:center;gap:10px">';
+  h+='<span id="gap-bulk-count" style="font-size:12px;font-weight:600;color:var(--blue)">0 geselecteerd</span>';
+  h+='<span style="font-size:12px;color:var(--text-muted)">\u2192 Status instellen:</span>';
+  h+='<button class="btn btn-sm" style="background:#FEE2E2;color:#DC2626;border-color:#FCA5A5" onclick="bulkSetGapStatus(\'gap\')">GAP</button>';
+  h+='<button class="btn btn-sm" style="background:#E1F5EE;color:#0F6E56;border-color:#86EFAC" onclick="bulkSetGapStatus(\'compliant\')">Compliant</button>';
+  h+='<button class="btn btn-sm" onclick="bulkSetGapStatus(\'\')">— Open</button>';
+  h+='<button class="btn btn-sm" onclick="clearGapSelection()" style="margin-left:auto">Deselecteren</button>';
+  h+='</div>';
+  h+='<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">'+filteredRows.filter(function(x){return x.applicable;}).length+' applicable &middot; '+filteredRows.length+' zichtbaar</div>';
+  h+='<div class="tbl-wrap"><table><thead><tr><th style="width:30px"><input type="checkbox" title="Alles selecteren" onchange="toggleAllGapCheckboxes(this)" id="gap-chk-all" /></th><th style="width:55px">ID</th><th>Control</th><th style="width:80px">Applicable</th><th>Huidige situatie</th><th>Gewenste situatie</th><th>Gap</th><th style="width:90px">Prioriteit</th><th style="width:90px">Status</th></tr></thead><tbody>';
+  filteredRows.forEach(function(ctrl){
     var ri=c.gapControls.indexOf(ctrl);
     var prioColor=ctrl.priority==='hoog'?'#E53E3E':ctrl.priority==='midden'?'var(--amber)':ctrl.priority==='laag'?'var(--green)':'var(--text-muted)';
-    var stBadge='';
-    if(ctrl.applicable){
-      var sc=ctrl.status==='compliant'?'b-compliant':ctrl.status==='ofi'?'b-ofi':ctrl.status==='gap'?'b-major':ctrl.status==='minor'?'b-minor':'b-open';
-      var sl=ctrl.status==='compliant'?'Compliant':ctrl.status==='ofi'?'OFI':ctrl.status==='gap'?'Gap':ctrl.status==='minor'?'Minor':'Open';
-      stBadge='<span class="badge '+sc+'">'+sl+'</span>';
-    }
     var gadesc=aDesc(ctrl.id);
     h+='<tr'+(ctrl.applicable?'':' class="na-row"')+'>';
-    h+='<td style="cursor:pointer" onclick="showControlDesc(\'annex\',\''+ctrl.id+'\',\''+encodeURIComponent(gadesc.desc||ctrl.name)+'\',\'\',\''+encodeURIComponent(gadesc.doc||ctrl.doc||'')+'\',\''+encodeURIComponent(ctrl.name||'')+'\')"><span class="mono">'+ctrl.id+'</span></td>';
-    h+='<td style="font-size:12px;font-weight:500;cursor:pointer" onclick="showControlDesc(\'annex\',\''+ctrl.id+'\',\''+encodeURIComponent(gadesc.desc||ctrl.name)+'\',\'\',\''+encodeURIComponent(gadesc.doc||ctrl.doc||'')+'\',\''+encodeURIComponent(ctrl.name||'')+'\')">'+ctrl.name+'</td>';
+    h+='<td><input type="checkbox" class="gap-row-chk" data-ri="'+ri+'" onchange="updateGapBulkBar()" '+(ctrl.applicable?'':'disabled')+' /></td>';
+    h+='<td style="cursor:pointer" onclick="showControlDesc(\'annex\',\''+ctrl.id+'\',\''+encodeURIComponent(gadesc.desc||ctrl.name)+'\',\'\',\''+encodeURIComponent(gadesc.doc||ctrl.doc||'')+'\',\''+encodeURIComponent(ctrl.name||'')+'\')" ><span class="mono">'+ctrl.id+'</span></td>';
+    h+='<td style="font-size:12px;font-weight:500;cursor:pointer" onclick="showControlDesc(\'annex\',\''+ctrl.id+'\',\''+encodeURIComponent(gadesc.desc||ctrl.name)+'\',\'\',\''+encodeURIComponent(gadesc.doc||ctrl.doc||'')+'\',\''+encodeURIComponent(ctrl.name||'')+'\')" >'+ctrl.name+'</td>';
     h+='<td><label class="soa-toggle" onclick="toggleGapApplicable('+ri+')"><div class="toggle-box'+(ctrl.applicable?' on':'')+'" ><div class="toggle-dot"></div></div></label></td>';
     h+='<td><textarea style="width:100%;min-height:36px;padding:4px 6px;font-size:12px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:4px;resize:none;overflow:hidden;line-height:1.4" placeholder="Huidige situatie..." onchange="saveGapField('+ri+',\'currentState\',this.value)" oninput="autoResize(this)">'+(ctrl.currentState||'').replace(/</g,'&lt;')+'</textarea></td>';
     var annexDefaultDesired=(ANNEX_DESC[ctrl.id]?ANNEX_DESC[ctrl.id]:'');
@@ -3606,14 +3697,40 @@ function buildGapGrp(c){
     h+='<td><textarea style="width:100%;min-height:36px;padding:4px 6px;font-size:12px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:4px;resize:none;overflow:hidden;line-height:1.4" placeholder="Gewenste situatie..." onchange="saveGapField('+ri+',\'desiredState\',this.value)" oninput="autoResize(this)">'+annexDesiredVal.replace(/</g,'&lt;')+'</textarea></td>';
     h+='<td><textarea style="width:100%;min-height:36px;padding:4px 6px;font-size:12px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:4px;resize:none;overflow:hidden;line-height:1.4" placeholder="Gap beschrijving..." onchange="saveGapField('+ri+',\'gap\',this.value)" oninput="autoResize(this)">'+(ctrl.gap||'').replace(/</g,'&lt;')+'</textarea></td>';
     if(ctrl.applicable){
-      h+='<td><select onchange="saveGapField('+ri+',\'priority\',this.value);updatePrioColor(this)" style="font-size:12px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;font-family:inherit;color:'+prioColor+'"><option value="" style="color:#5A6B7E">—</option><option value="hoog" style="color:#E53E3E"'+(ctrl.priority==='hoog'?' selected':'')+'>Hoog</option><option value="midden" style="color:#D97706"'+(ctrl.priority==='midden'?' selected':'')+'>Midden</option><option value="laag" style="color:#0F6E56"'+(ctrl.priority==='laag'?' selected':'')+'>Laag</option></select></td>';
-      h+='<td><select onchange="saveGapField('+ri+',\'status\',this.value);updateStatusColor(this)" style="font-size:12px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;font-family:inherit;font-weight:600;'+statusColor(ctrl.status)+'"><option value="" style="background:#fff;color:#5A6B7E;font-weight:400">— Open</option><option value="gap" style="background:#FEE2E2;color:#DC2626"'+(ctrl.status==='gap'?' selected':'')+'>GAP</option><option value="compliant" style="background:#E1F5EE;color:#0F6E56"'+(ctrl.status==='compliant'?' selected':'')+'>Compliant</option></select></td>';
+      h+='<td><select onchange="saveGapField('+ri+',\'priority\',this.value);updatePrioColor(this)" style="font-size:12px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;font-family:inherit;color:'+prioColor+'"><option value="" style="color:#5A6B7E">\u2014</option><option value="hoog" style="color:#E53E3E"'+(ctrl.priority==='hoog'?' selected':'')+'>Hoog</option><option value="midden" style="color:#D97706"'+(ctrl.priority==='midden'?' selected':'')+'>Midden</option><option value="laag" style="color:#0F6E56"'+(ctrl.priority==='laag'?' selected':'')+'>Laag</option></select></td>';
+      h+='<td><select onchange="saveGapField('+ri+',\'status\',this.value);updateStatusColor(this)" style="font-size:12px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;font-family:inherit;font-weight:600;'+statusColor(ctrl.status)+'"><option value="" style="background:#fff;color:#5A6B7E;font-weight:400">\u2014 Open</option><option value="gap" style="background:#FEE2E2;color:#DC2626"'+(ctrl.status==='gap'?' selected':'')+'>GAP</option><option value="compliant" style="background:#E1F5EE;color:#0F6E56"'+(ctrl.status==='compliant'?' selected':'')+'>Compliant</option></select></td>';
     } else {
       h+='<td></td><td></td>';
     }
     h+='</tr>';
   });
   return h+'</tbody></table></div>';
+}
+
+function updateGapBulkBar(){
+  var chks=document.querySelectorAll('.gap-row-chk:checked');
+  var bar=document.getElementById('gap-bulk-bar');
+  var cnt=document.getElementById('gap-bulk-count');
+  if(bar){bar.style.display=chks.length?'flex':'none';}
+  if(cnt)cnt.textContent=chks.length+' geselecteerd';
+}
+function clearGapSelection(){
+  document.querySelectorAll('.gap-row-chk').forEach(function(c){c.checked=false;});
+  var all=document.getElementById('gap-chk-all');if(all)all.checked=false;
+  updateGapBulkBar();
+}
+function toggleAllGapCheckboxes(masterChk){
+  document.querySelectorAll('.gap-row-chk:not([disabled])').forEach(function(c){c.checked=masterChk.checked;});
+  updateGapBulkBar();
+}
+function bulkSetGapStatus(status){
+  var c=clients()[ST.sel];if(!c)return;
+  var chks=document.querySelectorAll('.gap-row-chk:checked');
+  chks.forEach(function(chk){
+    var ri=parseInt(chk.getAttribute('data-ri'));
+    if(!isNaN(ri)&&c.gapControls[ri]&&c.gapControls[ri].applicable){c.gapControls[ri].status=status;}
+  });
+  saveDB();clearGapSelection();renderGapGrp();updateProgressBar();
 }
 
 function renderGapGrp(){
