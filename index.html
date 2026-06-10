@@ -1201,77 +1201,22 @@ function renderClients(){
     var lbl=ST.module==='impl'?'implementatietrajecten':ST.module==='audit'?'audit trajecten':'gap assessments';
     return '<div class="empty"><div class="empty-icon">&#9672;</div><div class="empty-title">Nog geen klanten</div><div class="empty-sub">Voeg een klant toe om te beginnen met '+lbl+'.</div><button class="btn btn-primary" onclick="openModal(\'addClient\')">+ Eerste klant toevoegen</button></div>';
   }
-
-  // ── Intern dashboard overzicht (alle modules) ────────────────────
-  var allImpl=DB.impl||[];var allAudit=DB.audit||[];var allGap=DB.gap||[];
   var modTitle=ST.module==='impl'?'Implementatie':ST.module==='audit'?'Internal Audit':'Gap Assessment';
-  var h='<div style="margin-bottom:1.75rem">';
-  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">';
-  h+='<div><div style="font-size:20px;font-weight:600">'+modTitle+'</div>';
-  h+='<div style="font-size:13px;color:var(--text-muted);margin-top:3px">'+cl.length+' klant'+(cl.length!==1?'en':'')+' &middot; '+new Date().toLocaleDateString('nl-NL',{day:'2-digit',month:'long',year:'numeric'})+'</div></div>';
-  h+='</div>';
-
-  // Totaaloverzicht alle modules
-  if(allImpl.length||allAudit.length||allGap.length){
-    h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:1.25rem">';
-    // Impl stats
-    var totalDocs=allImpl.reduce(function(s,c){return s+((c.domains||[]).reduce(function(a,d){return a+(d.docs||[]).length;},0));},0);
-    var approvedDocs=allImpl.reduce(function(s,c){return s+((c.domains||[]).reduce(function(a,d){return a+(d.docs||[]).filter(function(doc){return doc.status==='approved';}).length;},0));},0);
-    h+='<div style="flex:1;min-width:160px;background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;box-shadow:var(--sh)">';
-    h+='<div style="font-size:10px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">&#128196; Implementatie</div>';
-    h+='<div style="font-size:22px;font-weight:700;color:var(--text)">'+allImpl.length+'</div><div style="font-size:11px;color:var(--text-muted)">klanten &middot; '+approvedDocs+'/'+totalDocs+' docs goedgekeurd</div>';
-    h+='</div>';
-    // Gap stats
-    var gapClients=allGap.length;var gapDone=allGap.filter(function(c){var gc=c.gapControls||[];var ap=gc.filter(function(x){return x.applicable;});return ap.length&&ap.filter(function(x){return x.status&&x.status!=='open';}).length===ap.length;}).length;
-    h+='<div style="flex:1;min-width:160px;background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;box-shadow:var(--sh)">';
-    h+='<div style="font-size:10px;font-weight:700;color:#0F6E56;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">&#128270; Gap Assessment</div>';
-    h+='<div style="font-size:22px;font-weight:700;color:var(--text)">'+gapClients+'</div><div style="font-size:11px;color:var(--text-muted)">klanten &middot; '+gapDone+' volledig beoordeeld</div>';
-    h+='</div>';
-    // Audit stats
-    var auditClients=allAudit.length;var openFindings=allAudit.reduce(function(s,c){return s+(c.findings||[]).filter(function(f){return f.status!=='compliant';}).length;},0);
-    h+='<div style="flex:1;min-width:160px;background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;box-shadow:var(--sh)">';
-    h+='<div style="font-size:10px;font-weight:700;color:#7C3AED;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">&#128203; Internal Audit</div>';
-    h+='<div style="font-size:22px;font-weight:700;color:var(--text)">'+auditClients+'</div><div style="font-size:11px;color:var(--text-muted)">klanten &middot; '+openFindings+' open bevindingen</div>';
-    h+='</div>';
-    h+='</div>';
-  }
-  h+='</div>';
-
-  // ── Klantkaarten ────────────────────────────────────────────────
-  h+='<div class="client-grid">';
+  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.75rem"><div><div style="font-size:20px;font-weight:600">'+modTitle+'</div><div style="font-size:13px;color:var(--text-muted);margin-top:3px">'+cl.length+' klant'+(cl.length!==1?'en':'')+'</div></div></div><div class="client-grid">';
   cl.forEach(function(c,i){
     var p=clientPct(c);
-    // Berekening per module
-    var sublbl,detailHtml='';
+    var sublbl,ownerTip='';
     if(ST.module==='impl'){
       var allDomDocs=(c.domains||[]).reduce(function(a,d){return a.concat(d.docs||[]);}, []);
       var apr=allDomDocs.filter(function(d){return d.status==='approved';}).length;
       sublbl=apr+'/'+allDomDocs.length+' goedgekeurd';
-      // Preparer/reviewer mini-overzicht
-      var preparers=[],reviewers=[];
-      allDomDocs.forEach(function(d){if(d.preparerName&&preparers.indexOf(d.preparerName)<0)preparers.push(d.preparerName);if(d.reviewerName&&reviewers.indexOf(d.reviewerName)<0)reviewers.push(d.reviewerName);});
-      if(preparers.length||reviewers.length){
-        detailHtml='<div style="margin-top:6px;font-size:10px;color:var(--text-muted);line-height:1.5">';
-        if(preparers.length)detailHtml+='<span title="Preparers">&#9998; '+preparers.map(function(n){return n.split(' ')[0];}).join(', ')+'</span> ';
-        if(reviewers.length)detailHtml+='<span title="Reviewers">&#10003; '+reviewers.map(function(n){return n.split(' ')[0];}).join(', ')+'</span>';
-        detailHtml+='</div>';
-      }
     } else if(ST.module==='audit'){
-      var applicable=(c.annexA||[]).filter(function(x){return x.applicable;}).length;
-      var openF=(c.findings||[]).filter(function(f){return f.status!=='compliant';}).length;
-      sublbl=applicable+' controls applicable';
-      if(openF)detailHtml='<div style="margin-top:4px;font-size:10px;color:#DC2626">&#9654; '+openF+' open bevindingen</div>';
+      sublbl=(c.annexA||[]).filter(function(x){return x.applicable;}).length+' controls applicable';
     } else {
-      var gc=c.gapControls||[];var ap=gc.filter(function(x){return x.applicable;});
-      var gapCount=ap.filter(function(x){return x.status==='gap';}).length;
-      var complCount=ap.filter(function(x){return x.status==='compliant';}).length;
       sublbl=(c.findings||[]).length+' bevindingen';
-      if(ap.length)detailHtml='<div style="margin-top:4px;font-size:10px;color:var(--text-muted)"><span style="color:#DC2626">'+gapCount+' GAP</span> &middot; <span style="color:#0F6E56">'+complCount+' Compliant</span></div>';
     }
-    // Owner badge
-    var ownerBadge='';
-    if(c.ownerName){var ownerIni=c.ownerName.split(' ').map(function(n){return n[0];}).join('').substring(0,2).toUpperCase();var isMe=AUTH.user&&c.owner===AUTH.user.localAccountId;ownerBadge='<div title="Aangemaakt door: '+c.ownerName+'" style="position:absolute;bottom:10px;right:12px;width:22px;height:22px;border-radius:50%;background:'+(isMe?'var(--blue)':'#9CA3AF')+';color:white;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700">'+ownerIni+'</div>';}
-    h+='<div class="client-card" onclick="openClient('+i+')" style="position:relative">'+
+    if(c.ownerName){var isMe=AUTH.user&&c.owner===AUTH.user.localAccountId;ownerTip='<div style="font-size:10px;color:var(--text-muted);margin-top:4px">'+(isMe?'&#128100; jouw klant':'&#128100; '+c.ownerName.split(' ')[0])+'</div>';}
+    h+='<div class="client-card" onclick="openClient('+i+')">'+
       '<button class="card-del" onclick="event.stopPropagation();delClient('+i+')">&#x2715;</button>'+
       '<button class="card-menu" onclick="event.stopPropagation();toggleCardMenu('+i+',this)">&#8943;</button>'+
       '<div class="card-dropdown" id="cdm-'+i+'" onclick="event.stopPropagation()">'+
@@ -1279,8 +1224,7 @@ function renderClients(){
         '<div class="dd-divider"></div>'+
         '<button class="dd-next" onclick="closeCardMenus();startNextPhase('+i+')">&#8594;&nbsp; Starten volgende fase</button>'+
       '</div>'+
-      ownerBadge+
-      '<div class="c-avatar">'+ini(c.name)+'</div><div class="c-name">'+c.name+'</div><div class="c-phase">'+(c.phase||'Fase niet ingesteld')+'</div><div class="pbar"><div class="pbar-fill" style="width:'+p+'%"></div></div><div class="pbar-label">'+sublbl+' &middot; '+p+'%</div>'+detailHtml+'<div class="open-hint">openen &rarr;</div></div>';
+      '<div class="c-avatar">'+ini(c.name)+'</div><div class="c-name">'+c.name+'</div><div class="c-phase">'+(c.phase||'Fase niet ingesteld')+'</div><div class="pbar"><div class="pbar-fill" style="width:'+p+'%"></div></div><div class="pbar-label">'+sublbl+' &middot; '+p+'%</div>'+ownerTip+'<div class="open-hint">openen &rarr;</div></div>';
   });
   return h+'</div>';
 }
@@ -1332,6 +1276,62 @@ function renderImplDetail(){
   h+=renderScopeCard(c);
   h+='<div class="prog-hdr"><div class="prog-pct">'+p+'%</div><div class="prog-trk"><div class="prog-lbl">Totale voortgang &mdash; '+apr+' van '+total+' documenten goedgekeurd</div><div class="prog-bar"><div class="prog-fill" style="width:'+p+'%"></div></div></div></div>';
   h+='<div class="stats-row"><div class="stat-card"><div class="stat-val" style="color:#0F6E56">'+apr+'</div><div class="stat-lbl">Goedgekeurd</div></div><div class="stat-card"><div class="stat-val" style="color:var(--amber)">'+rev+'</div><div class="stat-lbl">In review</div></div><div class="stat-card"><div class="stat-val" style="color:#5F5E5A">'+con+'</div><div class="stat-lbl">Concept</div></div><div class="stat-card"><div class="stat-val" style="color:var(--blue)">'+total+'</div><div class="stat-lbl">Totaal</div></div></div>';
+
+  // ── Intern dashboard panel ────────────────────────────────────────
+  var dashRows=[];
+  // Per domein: docs + preparers/reviewers
+  var allPreparers={},allReviewers={};
+  (c.domains||[]).forEach(function(dom){
+    (dom.docs||[]).forEach(function(d){
+      if(d.preparerName)allPreparers[d.preparerName]=(allPreparers[d.preparerName]||0)+1;
+      if(d.reviewerName)allReviewers[d.reviewerName]=(allReviewers[d.reviewerName]||0)+1;
+    });
+  });
+  var prepNames=Object.keys(allPreparers),revNames=Object.keys(allReviewers);
+  h+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:1.25rem;box-shadow:var(--sh)">';
+  h+='<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Intern overzicht</div>';
+  h+='<div style="display:flex;flex-wrap:wrap;gap:16px 32px">';
+  // Aangemaakt door
+  if(c.ownerName){
+    var isMe=AUTH.user&&c.owner===AUTH.user.localAccountId;
+    h+='<div><div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Aangemaakt door</div>';
+    h+='<div style="font-size:13px;color:var(--text);font-weight:500">'+c.ownerName+(isMe?' <span style="font-size:10px;background:#EBF2FF;color:var(--blue);padding:1px 6px;border-radius:10px;font-weight:600">jij</span>':'')+'</div></div>';
+  }
+  // Preparers
+  if(prepNames.length){
+    h+='<div><div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">&#9998; Preparers</div>';
+    h+='<div style="display:flex;flex-wrap:wrap;gap:4px">';
+    prepNames.forEach(function(n){
+      var cnt=allPreparers[n];
+      h+='<span style="font-size:12px;color:var(--text);font-weight:500;background:#F0F4F8;border-radius:20px;padding:2px 10px">'+n+' <span style="font-size:10px;color:var(--text-muted)">'+cnt+' doc'+(cnt>1?'s':'')+'</span></span>';
+    });
+    h+='</div></div>';
+  }
+  // Reviewers
+  if(revNames.length){
+    h+='<div><div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">&#10003; Reviewers</div>';
+    h+='<div style="display:flex;flex-wrap:wrap;gap:4px">';
+    revNames.forEach(function(n){
+      var cnt=allReviewers[n];
+      h+='<span style="font-size:12px;color:var(--text);font-weight:500;background:#E1F5EE;border-radius:20px;padding:2px 10px">'+n+' <span style="font-size:10px;color:#0F6E56">'+cnt+' doc'+(cnt>1?'s':'')+'</span></span>';
+    });
+    h+='</div></div>';
+  }
+  // Geen preparer/reviewer ingevuld
+  var docsWithoutPrep=allDomDocs.filter(function(d){return d.status!=='concept'&&!d.preparerName;}).length;
+    if(docsWithoutRev)h+='<div style="font-size:12px;color:#D97706">&#9888; '+docsWithoutRev+' goedgekeurde doc'+(docsWithoutRev>1?'s':'')+' zonder reviewer</div>';
+  if(docsWithoutPrep||docsWithoutRev){
+    h+='<div><div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Aandacht</div>';
+    if(docsWithoutPrep)h+='<div style="font-size:12px;color:#D97706">&#9888; '+docsWithoutPrep+' doc'+(docsWithoutPrep>1?'s zijn':' is')+' niet-concept zonder preparer</div>';
+    if(docsWithoutRev)h+='<div style="font-size:12px;color:#D97706">&#9888; '+docsWithoutRev+' goedgekeurde doc'+(docsWithoutRev>1?'s':'')+' zonder reviewer</div>';
+    h+='</div>';
+  }
+  if(!c.ownerName&&!prepNames.length&&!revNames.length){
+    h+='<div style="font-size:12px;color:var(--text-muted);font-style:italic">Nog geen preparer of reviewer ingevuld bij documenten.</div>';
+  }
+  h+='</div></div>';
+  // ── /Intern dashboard panel ───────────────────────────────────────
+
   h+='<div class="tabs"><button class="tab'+(ST.tab==='domains'?' active':'')+'" onclick="setTab(\'domains\')">Domeinen</button><button class="tab'+(ST.tab==='soa'?' active':'')+'" onclick="setTab(\'soa\')">Statement of Applicability</button><button class="tab'+(ST.tab==='notes'?' active':'')+'" onclick="setTab(\'notes\')">Notities</button></div>';
   if(ST.tab==='domains')h+=renderDomainsTab(c);
   else if(ST.tab==='soa')h+=renderSoaTab(c);
@@ -3650,8 +3650,32 @@ function renderGapFindings(c){
 }
 
 function buildGapGrp(c){
+  // Render filter bar + placeholder for table
+  var fStatus=ST.gapFStatus||'';
+  var fSearch=(ST.gapSearch||'');
+  var h='<div id="gap-filter-bar" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center">';
+  h+='<input id="gap-search-inp" type="text" placeholder="\u{1F50D} Zoeken op ID of naam..." value="'+fSearch.replace(/"/g,'&quot;')+'" oninput="ST.gapSearch=this.value;renderGapTable()" style="flex:1;min-width:160px;padding:5px 10px;font-size:12px;border:1px solid var(--border);border-radius:6px;font-family:DM Sans,sans-serif" />';
+  h+='<select id="gap-status-sel" onchange="ST.gapFStatus=this.value;renderGapTable()" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-family:DM Sans,sans-serif">';
+  h+='<option value=""'+(fStatus===''?' selected':'')+'>Alle</option>';
+  h+='<option value="applicable"'+(fStatus==='applicable'?' selected':'')+'>Applicable</option>';
+  h+='<option value="gap"'+(fStatus==='gap'?' selected':'')+'>GAP</option>';
+  h+='<option value="compliant"'+(fStatus==='compliant'?' selected':'')+'>Compliant</option>';
+  h+='<option value="open"'+(fStatus==='open'?' selected':'')+'>Open</option>';
+  h+='</select>';
+  h+='<button class="btn btn-sm" onclick="toggleAllGapApplicable()">Alles aan/uit</button>';
+  h+='</div>';
+  h+='<div id="gap-table-content">'+buildGapTable(c)+'</div>';
+  return h;
+}
+
+function renderGapTable(){
+  var c=clients()[ST.sel];
+  var tbl=document.getElementById('gap-table-content');
+  if(tbl)tbl.innerHTML=buildGapTable(c);
+}
+
+function buildGapTable(c){
   var rows=c.gapControls.filter(function(x){return x.group===ST.gapGrp;});
-  // Zoek/filter
   var fStatus=ST.gapFStatus||'';
   var fSearch=(ST.gapSearch||'').toLowerCase();
   var filteredRows=rows.slice();
@@ -3661,33 +3685,13 @@ function buildGapGrp(c){
   else if(fStatus==='compliant')filteredRows=filteredRows.filter(function(x){return x.applicable&&x.status==='compliant';});
   else if(fStatus==='open')filteredRows=filteredRows.filter(function(x){return x.applicable&&(!x.status||x.status==='');});
 
-  var h='<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center">';
-  h+='<input type="text" placeholder="\u{1F50D} Zoeken op ID of naam..." value="'+(ST.gapSearch||'').replace(/"/g,'&quot;')+'" oninput="ST.gapSearch=this.value;renderGapGrp()" style="flex:1;min-width:160px;padding:5px 10px;font-size:12px;border:1px solid var(--border);border-radius:6px;font-family:DM Sans,sans-serif" />';
-  h+='<select onchange="ST.gapFStatus=this.value;renderGapGrp()" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-family:DM Sans,sans-serif">';
-  h+='<option value=""'+(fStatus===''?' selected':'')+'>Alle</option>';
-  h+='<option value="applicable"'+(fStatus==='applicable'?' selected':'')+'>Applicable</option>';
-  h+='<option value="gap"'+(fStatus==='gap'?' selected':'')+'>GAP</option>';
-  h+='<option value="compliant"'+(fStatus==='compliant'?' selected':'')+'>Compliant</option>';
-  h+='<option value="open"'+(fStatus==='open'?' selected':'')+'>Open</option>';
-  h+='</select>';
-  h+='<button class="btn btn-sm" onclick="toggleAllGapApplicable()">Alles aan/uit</button>';
-  h+='</div>';
-  h+='<div id="gap-bulk-bar" style="display:none;background:#EBF2FF;border:1px solid #B5D4F4;border-radius:6px;padding:8px 12px;margin-bottom:10px;flex-wrap:wrap;align-items:center;gap:10px">';
-  h+='<span id="gap-bulk-count" style="font-size:12px;font-weight:600;color:var(--blue)">0 geselecteerd</span>';
-  h+='<span style="font-size:12px;color:var(--text-muted)">\u2192 Status instellen:</span>';
-  h+='<button class="btn btn-sm" style="background:#FEE2E2;color:#DC2626;border-color:#FCA5A5" onclick="bulkSetGapStatus(\'gap\')">GAP</button>';
-  h+='<button class="btn btn-sm" style="background:#E1F5EE;color:#0F6E56;border-color:#86EFAC" onclick="bulkSetGapStatus(\'compliant\')">Compliant</button>';
-  h+='<button class="btn btn-sm" onclick="bulkSetGapStatus(\'\')">— Open</button>';
-  h+='<button class="btn btn-sm" onclick="clearGapSelection()" style="margin-left:auto">Deselecteren</button>';
-  h+='</div>';
-  h+='<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">'+filteredRows.filter(function(x){return x.applicable;}).length+' applicable &middot; '+filteredRows.length+' zichtbaar</div>';
-  h+='<div class="tbl-wrap"><table><thead><tr><th style="width:30px"><input type="checkbox" title="Alles selecteren" onchange="toggleAllGapCheckboxes(this)" id="gap-chk-all" /></th><th style="width:55px">ID</th><th>Control</th><th style="width:80px">Applicable</th><th>Huidige situatie</th><th>Gewenste situatie</th><th>Gap</th><th style="width:90px">Prioriteit</th><th style="width:90px">Status</th></tr></thead><tbody>';
+  var h='<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">'+filteredRows.filter(function(x){return x.applicable;}).length+' applicable &middot; '+filteredRows.length+' zichtbaar</div>';
+  h+='<div class="tbl-wrap"><table><thead><tr><th style="width:55px">ID</th><th>Control</th><th style="width:80px">Applicable</th><th>Huidige situatie</th><th>Gewenste situatie</th><th>Gap</th><th style="width:90px">Prioriteit</th><th style="width:90px">Status</th></tr></thead><tbody>';
   filteredRows.forEach(function(ctrl){
     var ri=c.gapControls.indexOf(ctrl);
     var prioColor=ctrl.priority==='hoog'?'#E53E3E':ctrl.priority==='midden'?'var(--amber)':ctrl.priority==='laag'?'var(--green)':'var(--text-muted)';
     var gadesc=aDesc(ctrl.id);
     h+='<tr'+(ctrl.applicable?'':' class="na-row"')+'>';
-    h+='<td><input type="checkbox" class="gap-row-chk" data-ri="'+ri+'" onchange="updateGapBulkBar()" '+(ctrl.applicable?'':'disabled')+' /></td>';
     h+='<td style="cursor:pointer" onclick="showControlDesc(\'annex\',\''+ctrl.id+'\',\''+encodeURIComponent(gadesc.desc||ctrl.name)+'\',\'\',\''+encodeURIComponent(gadesc.doc||ctrl.doc||'')+'\',\''+encodeURIComponent(ctrl.name||'')+'\')" ><span class="mono">'+ctrl.id+'</span></td>';
     h+='<td style="font-size:12px;font-weight:500;cursor:pointer" onclick="showControlDesc(\'annex\',\''+ctrl.id+'\',\''+encodeURIComponent(gadesc.desc||ctrl.name)+'\',\'\',\''+encodeURIComponent(gadesc.doc||ctrl.doc||'')+'\',\''+encodeURIComponent(ctrl.name||'')+'\')" >'+ctrl.name+'</td>';
     h+='<td><label class="soa-toggle" onclick="toggleGapApplicable('+ri+')"><div class="toggle-box'+(ctrl.applicable?' on':'')+'" ><div class="toggle-dot"></div></div></label></td>';
@@ -3707,36 +3711,16 @@ function buildGapGrp(c){
   return h+'</tbody></table></div>';
 }
 
-function updateGapBulkBar(){
-  var chks=document.querySelectorAll('.gap-row-chk:checked');
-  var bar=document.getElementById('gap-bulk-bar');
-  var cnt=document.getElementById('gap-bulk-count');
-  if(bar){bar.style.display=chks.length?'flex':'none';}
-  if(cnt)cnt.textContent=chks.length+' geselecteerd';
-}
-function clearGapSelection(){
-  document.querySelectorAll('.gap-row-chk').forEach(function(c){c.checked=false;});
-  var all=document.getElementById('gap-chk-all');if(all)all.checked=false;
-  updateGapBulkBar();
-}
-function toggleAllGapCheckboxes(masterChk){
-  document.querySelectorAll('.gap-row-chk:not([disabled])').forEach(function(c){c.checked=masterChk.checked;});
-  updateGapBulkBar();
-}
-function bulkSetGapStatus(status){
-  var c=clients()[ST.sel];if(!c)return;
-  var chks=document.querySelectorAll('.gap-row-chk:checked');
-  chks.forEach(function(chk){
-    var ri=parseInt(chk.getAttribute('data-ri'));
-    if(!isNaN(ri)&&c.gapControls[ri]&&c.gapControls[ri].applicable){c.gapControls[ri].status=status;}
-  });
-  saveDB();clearGapSelection();renderGapGrp();updateProgressBar();
-}
 
 function renderGapGrp(){
   var c=clients()[ST.sel];
-  var el=document.getElementById('gap-grp-content');
-  if(el)el.innerHTML=buildGapGrp(c);
+  // Only replace the table part, NOT the search bar (keeps focus)
+  var tbl=document.getElementById('gap-table-content');
+  if(tbl)tbl.innerHTML=buildGapTable(c);
+  else{
+    var el=document.getElementById('gap-grp-content');
+    if(el)el.innerHTML=buildGapGrp(c);
+  }
   var btns=document.querySelectorAll('[onclick^="ST.gapGrp"]');
   btns.forEach(function(b){
     var g=b.getAttribute('onclick').match(/\'([^\']+)\'/)[1];
