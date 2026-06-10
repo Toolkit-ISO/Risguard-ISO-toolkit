@@ -2812,11 +2812,75 @@ function openClient(i){
   if(ST.module==='impl')attachSearchEvents();
 }
 
+// ═══════════════════════════════════════════
+// SHAREPOINT MAP AANMAKEN BIJ NIEUWE KLANT
+// ═══════════════════════════════════════════
+var SP_GENERAL_URL = 'https://risguard.sharepoint.com/:f:/s/Risguard/IgB8VhHdFYvAQ5ScSeIc2HIpAVK_Jx_C1OQaQDU4HHPBS0I?e=cjTskT';
+var SP_CLIENT_SUBFOLDERS = ['Gap assessment', 'Implementation', 'Internal audit'];
+
+// Maakt een submap aan onder een gegeven driveId/itemId, geeft item terug (of bestaand item als het al bestaat)
+function spCreateFolder(driveId, parentItemId, folderName){
+  return acquireToken().then(function(token){
+    return fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/items/'+parentItemId+'/children', {
+      method: 'POST',
+      headers: {Authorization: 'Bearer '+token, 'Content-Type': 'application/json'},
+      body: JSON.stringify({name: folderName, folder: {}, '@microsoft.graph.conflictBehavior': 'fail'})
+    }).then(function(r){ return r.json(); });
+  }).then(function(res){
+    // 409 nameAlreadyExists = map bestaat al, dat is prima
+    if(res.error && res.error.code === 'nameAlreadyExists') return {id: null, name: folderName, existed: true};
+    if(res.error) throw new Error('Map aanmaken mislukt ('+folderName+'): '+res.error.message);
+    return res;
+  });
+}
+
+// Maakt volledige structuur aan: Klanten/[naam]/Gap assessment + Implementation + Internal audit
+function spCreateClientFolders(clientName){
+  if(!SP_SYNC.online || !AUTH.user) return Promise.resolve();
+  return resolveSharePointFolder(SP_GENERAL_URL).then(function(ref){
+    // ref = {driveId, itemId} van de General map
+    // Stap 1: zoek of maak de Klanten map
+    return spCreateFolder(ref.driveId, ref.itemId, 'Klanten').then(function(klantenRes){
+      // Haal de Klanten map op (id ophalen als hij al bestond)
+      return acquireToken().then(function(token){
+        return fetch('https://graph.microsoft.com/v1.0/drives/'+ref.driveId+'/items/'+ref.itemId+'/children?$filter=name eq %27Klanten%27&$select=id,name', {
+          headers: {Authorization: 'Bearer '+token}
+        }).then(function(r){ return r.json(); });
+      }).then(function(res){
+        var klantenId = res.value && res.value.length > 0 ? res.value[0].id : klantenRes.id;
+        if(!klantenId) throw new Error('Klanten map niet gevonden na aanmaken.');
+        // Stap 2: maak klantmap aan
+        return spCreateFolder(ref.driveId, klantenId, clientName).then(function(clientRes){
+          return acquireToken().then(function(token){
+            return fetch('https://graph.microsoft.com/v1.0/drives/'+ref.driveId+'/items/'+klantenId+'/children?$filter=name eq %27'+encodeURIComponent(clientName)+'%27&$select=id,name', {
+              headers: {Authorization: 'Bearer '+token}
+            }).then(function(r){ return r.json(); });
+          }).then(function(res){
+            var clientId = res.value && res.value.length > 0 ? res.value[0].id : clientRes.id;
+            if(!clientId) throw new Error('Klantmap niet gevonden na aanmaken.');
+            // Stap 3: maak submappen aan
+            return Promise.all(SP_CLIENT_SUBFOLDERS.map(function(sub){
+              return spCreateFolder(ref.driveId, clientId, sub);
+            }));
+          });
+        });
+      });
+    });
+  }).catch(function(e){
+    console.warn('SharePoint mappen aanmaken mislukt:', e);
+    // Geen blokkade — klant gewoon aangemaakt zonder mappen
+  });
+}
+
 function addClient(){
   var n=(document.getElementById('m-n')||{}).value;if(!n||!n.trim())return;
-  var obj={name:n.trim(),contact:((document.getElementById('m-c')||{}).value||'').trim(),phase:(document.getElementById('m-p')||{}).value||'',sector:((document.getElementById('m-sector')||{}).value||''),size:((document.getElementById('m-size')||{}).value||''),certDate:((document.getElementById('m-certdate')||{}).value||''),docs:[],noteLog:[]};
+  var obj={name:n.trim(),contact:((document.getElementById('m-c')||{}).value||'').trim(),phase:(document.getElementById('m-p')||{}).value||'',sector:((document.getElementById('m-sector')||{}).value||''),size:((document.getElementById('m-size')||{}).value||''),certDate:((document.getElementById('m-certdate')||{}).value||''),docs:[],noteLog:[],owner:AUTH.user?AUTH.user.localAccountId:null,ownerName:AUTH.user?AUTH.user.name||AUTH.user.username:null};
   if(ST.module==='audit'){obj.annexA=freshAnnex();obj.clauses=freshClauses();obj.auditPlan={};} else if(ST.module==='gap'){obj.gapControls=freshGapControls();obj.gapClauses=freshGapClauses();obj.findings=[];}
   DB[ST.module].push(obj);saveDB();closeModal();render();
+  // Mappen aanmaken in SharePoint (alleen voor impl en gap, niet audit want die klant bestaat al)
+  if(ST.module==='impl'||ST.module==='gap'){
+    spCreateClientFolders(obj.name);
+  }
 }
 
 function saveEditClient(ci){
