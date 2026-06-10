@@ -317,7 +317,7 @@ var MSAL_CONFIG={
   },
   cache:{cacheLocation:'sessionStorage',storeAuthStateInCookie:false}
 };
-var GRAPH_SCOPES=['User.Read','Sites.ReadWrite.All','Files.ReadWrite.All'];
+var GRAPH_SCOPES=['User.Read','User.Read.All','Sites.ReadWrite.All','Files.ReadWrite.All'];
 var msalInstance=null;
 var AUTH={user:null,token:null,ready:false};
 
@@ -1447,12 +1447,15 @@ function renderDomainsTab(c){
           h+='<td>'+nm+'</td>';
           h+='<td>'+catHtml+'</td>';
           h+='<td>'+ctrlHtml+'</td>';
-          h+='<td><span class="badge '+bc+'">'+bl+'</span></td>';
+          // Preparer / reviewer badges
+          var roleHtml='';
+          if(doc.preparerName){roleHtml+='<span style="font-size:10px;color:var(--text-muted);white-space:nowrap">&#9998; '+(doc.preparerName.split(' ')[0])+'</span>';}
+          if(doc.reviewerName){if(roleHtml)roleHtml+=' ';roleHtml+='<span style="font-size:10px;color:var(--text-muted);white-space:nowrap">&#10003; '+(doc.reviewerName.split(' ')[0])+'</span>';}
+          h+='<td><span class="badge '+bc+'">'+bl+'</span>'+(roleHtml?'<div style="margin-top:2px">'+roleHtml+'</div>':'')+'</td>';
           h+='<td style="font-size:11px;color:var(--text-muted)">'+(doc.date||'—')+'</td>';
           h+='<td style="display:flex;gap:3px">';
           h+='<button class="btn btn-sm" onclick="cycleDomainDocStatus('+di+','+doci+')" title="Status" style="font-size:12px">&#8635;</button>';
           h+='<button class="btn btn-sm btn-edit" onclick="openModal(\'editDomainDoc\',{di:'+di+',doci:'+doci+'})" title="Bewerken">&#9998;</button>';
-          h+='<button class="btn btn-sm" onclick="openModal(\'copyDomainDoc\',{di:'+di+',doci:'+doci+'})" title="Kopieer naar ander domein" style="font-size:12px">&#128203;</button>';
           h+='<button onclick="toggleDomainDocNote(\''+noteId+'\')" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 5px;font-size:11px;cursor:pointer;color:var(--text-muted)" title="Notitie">'+(hasNote?'&#128221;':'&#128172;')+'</button>';
           h+='<button class="btn btn-sm btn-danger" onclick="delDomainDoc('+di+','+doci+')">&#x2715;</button>';
           h+='</td></tr>';
@@ -1514,7 +1517,29 @@ function saveDomainDoc(di,doci){
   var status=(document.getElementById('dd-status')||{}).value||'concept';
   var cbs=document.querySelectorAll('.dd-ctrl-cb:checked');
   var ctrls=[];cbs.forEach(function(cb){ctrls.push(cb.value);});
-  var doc={name:name.trim(),link:link,controls:ctrls,category:cat,status:status,date:today()};
+  // Preparer / reviewer
+  var preparerEl=document.getElementById('dd-preparer');
+  var reviewerEl=document.getElementById('dd-reviewer');
+  var preparerId='',preparerName='',reviewerId='',reviewerName='';
+  if(preparerEl){
+    if(preparerEl.tagName==='SELECT'){
+      preparerId=preparerEl.value;
+      var pOpt=preparerEl.options[preparerEl.selectedIndex];
+      preparerName=pOpt?pOpt.text:'';
+    } else {
+      preparerName=preparerEl.value.trim();
+    }
+  }
+  if(reviewerEl){
+    if(reviewerEl.tagName==='SELECT'){
+      reviewerId=reviewerEl.value;
+      var rOpt=reviewerEl.options[reviewerEl.selectedIndex];
+      reviewerName=rOpt?rOpt.text:'';
+    } else {
+      reviewerName=reviewerEl.value.trim();
+    }
+  }
+  var doc={name:name.trim(),link:link,controls:ctrls,category:cat,status:status,date:today(),preparerId:preparerId,preparerName:preparerName,reviewerId:reviewerId,reviewerName:reviewerName};
   // Check if domain has been changed
   var newDi=parseInt((document.getElementById('dd-domain')||{}).value);
   if(isNaN(newDi))newDi=di;
@@ -1567,20 +1592,6 @@ function toggleDomainDocNote(id){
   ST.openNotes[id]=!ST.openNotes[id];
   var el=document.getElementById(id);
   if(el)el.style.display=ST.openNotes[id]?'':'none';
-}
-
-function executeCopyDomainDoc(fromDi,fromDoci){
-  var targetDi=parseInt((document.getElementById('cp-domain')||{}).value);
-  if(isNaN(targetDi))return;
-  var c=clients()[ST.sel];if(!c)return;
-  var srcDoc=c.domains[fromDi]&&c.domains[fromDi].docs?c.domains[fromDi].docs[fromDoci]:null;
-  if(!srcDoc)return;
-  // Maak een kopie van het document (zelfde data, inclusief spId/link)
-  var copy=JSON.parse(JSON.stringify(srcDoc));
-  // Voeg toe aan doeldomein
-  if(!c.domains[targetDi].docs)c.domains[targetDi].docs=[];
-  c.domains[targetDi].docs.push(copy);
-  saveDB();closeModal();render();
 }
 
 function saveDomainDocNote(di,doci,val){
@@ -2660,30 +2671,28 @@ function renderModal(){
         '<div class="field"><label>Categorie</label><select id="dd-cat"><option value="">— Geen</option>'+_catOpts+'</select></div>'+
         '<div class="field"><label>Status</label><select id="dd-status">'+_stOpts+'</select></div>'+
       '</div>'+
+      '<div class="field-row" id="dd-role-section">'+
+        '<div class="field"><label>Preparer</label><input id="dd-preparer" value="'+(_existingDoc.preparerName||'').replace(/"/g,'&quot;')+'" placeholder="Laden..." /></div>'+
+        '<div class="field"><label>Reviewer</label><input id="dd-reviewer" value="'+(_existingDoc.reviewerName||'').replace(/"/g,'&quot;')+'" placeholder="Laden..." /></div>'+
+      '</div>'+
       '<div class="field"><label>ISO 27001 Controls <span style="font-weight:400;color:var(--text-muted)">(selecteer alle van toepassing)</span></label>'+
         '<div style="border:1px solid var(--border);border-radius:6px;padding:10px;background:#FAFBFC;max-height:220px;overflow-y:auto" id="dd-ctrl-box">'+_cbSection+'</div>'+
         _toggleBtn+
       '</div>'+
       '<div class="modal-actions"><button class="btn" onclick="closeModal()">Annuleer</button><button class="btn btn-primary" onclick="saveDomainDoc('+_di+','+(_doci!==null&&_doci!==undefined?_doci:'null')+')">&#10003; Opslaan</button></div>'+
     '</div></div>';
-
-  } else if(ST.modal==='copyDomainDoc'){
-    var _cpdd=ST.mdata;
-    var _cpDi=_cpdd.di;
-    var _cpDoci=_cpdd.doci;
-    var _cpC=clients()[ST.sel];
-    var _cpDoc=_cpC&&_cpC.domains&&_cpC.domains[_cpDi]&&_cpC.domains[_cpDi].docs?_cpC.domains[_cpDi].docs[_cpDoci]:null;
-    if(!_cpDoc){root.innerHTML='';return;}
-    var _cpDomOpts=(_cpC.domains||[]).map(function(d,idx){
-      if(idx===_cpDi)return''; // skip huidige domein
-      return'<option value="'+idx+'">'+d.name+'</option>';
-    }).join('');
-    root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:420px">'+
-      '<div class="modal-title">&#128203; Kopieer naar domein</div>'+
-      '<div style="font-size:13px;color:var(--text-muted);margin-bottom:1.25rem">Koppel <strong>'+(_cpDoc.name||'dit document').replace(/</g,'&lt;')+'</strong> ook aan een ander domein. Het document wordt niet verplaatst.</div>'+
-      '<div class="field"><label>Kies domein</label><select id="cp-domain">'+_cpDomOpts+'</select></div>'+
-      '<div class="modal-actions"><button class="btn" onclick="closeModal()">Annuleer</button><button class="btn btn-primary" onclick="executeCopyDomainDoc('+_cpDi+','+_cpDoci+')">&#128203; Kopiëren</button></div>'+
-    '</div></div>';
+  // Async: replace text inputs with dropdowns if users available
+  fetchOrgUsers().then(function(users){
+    var sec=document.getElementById('dd-role-section');
+    if(!sec||!users||!users.length)return;
+    var prepVal=_existingDoc.preparerId||_existingDoc.preparerName||'';
+    var revVal=_existingDoc.reviewerId||_existingDoc.reviewerName||'';
+    var prepOpts=users.map(function(u){return'<option value="'+u.id+'"'+(prepVal===u.id?' selected':'')+'>'+u.name+'</option>';}).join('');
+    var revOpts=users.map(function(u){return'<option value="'+u.id+'"'+(revVal===u.id?' selected':'')+'>'+u.name+'</option>';}).join('');
+    sec.innerHTML=
+      '<div class="field"><label>Preparer</label><select id="dd-preparer"><option value="">— Geen</option>'+prepOpts+'</select></div>'+
+      '<div class="field"><label>Reviewer</label><select id="dd-reviewer"><option value="">— Geen</option>'+revOpts+'</select></div>';
+  });
 
   } else if(ST.modal==='addScopeDoc'){
     var ci2=ST.mdata;
@@ -2850,6 +2859,56 @@ function openClient(i){
 // ═══════════════════════════════════════════
 // SHAREPOINT MAP AANMAKEN BIJ NIEUWE KLANT
 // ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+// ORGANISATIE GEBRUIKERS (preparer / reviewer)
+// ═══════════════════════════════════════════
+var SP_USERS_CACHE = null; // {users: [{id,name,email}], ts: timestamp}
+
+function fetchOrgUsers(){
+  if(SP_USERS_CACHE && (Date.now()-SP_USERS_CACHE.ts < 5*60*1000)){
+    return Promise.resolve(SP_USERS_CACHE.users);
+  }
+  return acquireToken().then(function(token){
+    return fetch('https://graph.microsoft.com/v1.0/users?$select=id,displayName,mail,userPrincipalName&$top=100&$filter=accountEnabled eq true',{
+      headers:{Authorization:'Bearer '+token}
+    }).then(function(r){return r.json();});
+  }).then(function(res){
+    if(res.error){
+      console.warn('fetchOrgUsers: no permission, using fallback.',res.error.message);
+      return null; // fallback: null = vrij tekstveld tonen
+    }
+    var users=(res.value||[]).map(function(u){
+      return {id:u.id, name:u.displayName||u.userPrincipalName, email:u.mail||u.userPrincipalName};
+    });
+    SP_USERS_CACHE={users:users,ts:Date.now()};
+    return users;
+  }).catch(function(e){
+    console.warn('fetchOrgUsers error:',e);
+    return null;
+  });
+}
+
+// Bouw dropdown HTML voor preparer/reviewer, of vrij tekstveld als geen users beschikbaar
+function buildUserSelect(id, label, currentVal, users){
+  if(!users||!users.length){
+    // Fallback: vrij tekstveld
+    return '<div class="field"><label>'+label+'</label><input id="'+id+'" value="'+(currentVal||'').replace(/"/g,'&quot;')+'" placeholder="Naam..." /></div>';
+  }
+  var opts=users.map(function(u){
+    var sel=(currentVal&&(currentVal===u.id||currentVal===u.name))?'selected':'';
+    return '<option value="'+u.id+'" '+sel+'>'+u.name+'</option>';
+  }).join('');
+  return '<div class="field"><label>'+label+'</label><select id="'+id+'"><option value="">— Geen</option>'+opts+'</select></div>';
+}
+
+// Vertaal opgeslagen userId naar naam (voor weergave)
+function getUserName(val){
+  if(!val)return '';
+  if(!SP_USERS_CACHE)return val;
+  var u=SP_USERS_CACHE.users.find(function(u){return u.id===val||u.name===val;});
+  return u?u.name:val;
+}
+
 var SP_KLANTEN_URL = 'https://risguard.sharepoint.com/sites/Risguard/Gedeelde%20documenten/Forms/AllItems.aspx?id=%2Fsites%2FRisguard%2FGedeelde%20documenten%2FGeneral%2F01%2E%20Klanten&viewid=7d167599%2D5d55%2D45ff%2D9854%2Ddc110ee69eaf&p=true&ga=1';
 var SP_CLIENT_SUBFOLDERS = ['Gap assessment', 'Implementation', 'Internal audit'];
 
