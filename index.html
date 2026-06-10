@@ -1568,9 +1568,19 @@ function cycleDomainDocStatus(di,doci){
   var cycle=['concept','review','approved'];
   var cur=cycle.indexOf(doc.status||'concept');
   var next=cycle[(cur+1)%cycle.length];
-  var labels={concept:'Concept',review:'In review',approved:'Goedgekeurd'};
-  if(next==='review'||next==='approved'){
-    if(!confirm('"'+doc.name+'" instellen op '+labels[next]+'?'))return;
+  if(next==='review'){
+    if(!confirm('"'+doc.name+'" instellen op In review?'))return;
+  }
+  if(next==='approved'){
+    // Reviewer is de goedkeurder — als leeg, automatisch ingelogde gebruiker invullen
+    var reviewerName=doc.reviewerName||(AUTH.user?AUTH.user.name:'');
+    var msg='"'+doc.name+'" goedkeuren'+(reviewerName?' als '+reviewerName:'')+' — weet je het zeker?';
+    if(!confirm(msg))return;
+    // Zet reviewer op ingelogde gebruiker als nog leeg
+    if(!doc.reviewerName&&AUTH.user){
+      doc.reviewerName=AUTH.user.name;
+      doc.reviewerId=AUTH.user.localAccountId;
+    }
   }
   doc.status=next;
   doc.date=today();
