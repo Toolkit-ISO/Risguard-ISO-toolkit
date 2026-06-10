@@ -2815,10 +2815,10 @@ function openClient(i){
 // ═══════════════════════════════════════════
 // SHAREPOINT MAP AANMAKEN BIJ NIEUWE KLANT
 // ═══════════════════════════════════════════
-var SP_GENERAL_URL = 'https://risguard.sharepoint.com/:f:/s/Risguard/IgB8VhHdFYvAQ5ScSeIc2HIpAVK_Jx_C1OQaQDU4HHPBS0I?e=cjTskT';
+var SP_KLANTEN_URL = 'https://risguard.sharepoint.com/sites/Risguard/Gedeelde%20documenten/Forms/AllItems.aspx?id=%2Fsites%2FRisguard%2FGedeelde%20documenten%2FGeneral%2F01%2E%20Klanten&viewid=7d167599%2D5d55%2D45ff%2D9854%2Ddc110ee69eaf&p=true&ga=1';
 var SP_CLIENT_SUBFOLDERS = ['Gap assessment', 'Implementation', 'Internal audit'];
 
-// Maakt een submap aan onder een gegeven driveId/itemId, geeft item terug (of bestaand item als het al bestaat)
+// Maakt een submap aan onder een gegeven driveId/itemId; conflictBehavior fail = al bestaand is ok
 function spCreateFolder(driveId, parentItemId, folderName){
   return acquireToken().then(function(token){
     return fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/items/'+parentItemId+'/children', {
@@ -2827,48 +2827,61 @@ function spCreateFolder(driveId, parentItemId, folderName){
       body: JSON.stringify({name: folderName, folder: {}, '@microsoft.graph.conflictBehavior': 'fail'})
     }).then(function(r){ return r.json(); });
   }).then(function(res){
-    // 409 nameAlreadyExists = map bestaat al, dat is prima
     if(res.error && res.error.code === 'nameAlreadyExists') return {id: null, name: folderName, existed: true};
     if(res.error) throw new Error('Map aanmaken mislukt ('+folderName+'): '+res.error.message);
     return res;
   });
 }
 
-// Maakt volledige structuur aan: Klanten/[naam]/Gap assessment + Implementation + Internal audit
+// Haalt de 01. Klanten map op via adresbalk-URL
+function spGetKlantenRef(){
+  // Pad: /sites/Risguard/Gedeelde documenten/General/01. Klanten
+  return acquireToken().then(function(token){
+    return fetch('https://graph.microsoft.com/v1.0/sites/risguard.sharepoint.com:/sites/Risguard', {
+      headers: {Authorization: 'Bearer '+token}
+    }).then(function(r){ return r.json(); });
+  }).then(function(site){
+    if(!site.id) throw new Error('Site Risguard niet gevonden.');
+    return acquireToken().then(function(token){
+      return fetch('https://graph.microsoft.com/v1.0/sites/'+site.id+'/drive', {
+        headers: {Authorization: 'Bearer '+token}
+      }).then(function(r){ return r.json(); });
+    }).then(function(drive){
+      return acquireToken().then(function(token){
+        var folderPath = 'General/01. Klanten';
+        return fetch('https://graph.microsoft.com/v1.0/drives/'+drive.id+'/root:/'+encodeURIComponent(folderPath).replace(/%2F/g,'/')+':', {
+          headers: {Authorization: 'Bearer '+token}
+        }).then(function(r){ return r.json(); });
+      }).then(function(item){
+        if(!item.id) throw new Error('01. Klanten map niet gevonden.');
+        return {driveId: drive.id, itemId: item.id};
+      });
+    });
+  });
+}
+
+// Maakt structuur aan: 01. Klanten/[naam]/Gap assessment + Implementation + Internal audit
 function spCreateClientFolders(clientName){
   if(!SP_SYNC.online || !AUTH.user) return Promise.resolve();
-  return resolveSharePointFolder(SP_GENERAL_URL).then(function(ref){
-    // ref = {driveId, itemId} van de General map
-    // Stap 1: zoek of maak de Klanten map
-    return spCreateFolder(ref.driveId, ref.itemId, 'Klanten').then(function(klantenRes){
-      // Haal de Klanten map op (id ophalen als hij al bestond)
+  return spGetKlantenRef().then(function(ref){
+    // Stap 1: klantmap aanmaken (of bestaande ophalen)
+    return spCreateFolder(ref.driveId, ref.itemId, clientName).then(function(){
+      // Haal klantmap id op
       return acquireToken().then(function(token){
-        return fetch('https://graph.microsoft.com/v1.0/drives/'+ref.driveId+'/items/'+ref.itemId+'/children?$filter=name eq %27Klanten%27&$select=id,name', {
+        return fetch('https://graph.microsoft.com/v1.0/drives/'+ref.driveId+'/items/'+ref.itemId+'/children?$select=id,name', {
           headers: {Authorization: 'Bearer '+token}
         }).then(function(r){ return r.json(); });
       }).then(function(res){
-        var klantenId = res.value && res.value.length > 0 ? res.value[0].id : klantenRes.id;
-        if(!klantenId) throw new Error('Klanten map niet gevonden na aanmaken.');
-        // Stap 2: maak klantmap aan
-        return spCreateFolder(ref.driveId, klantenId, clientName).then(function(clientRes){
-          return acquireToken().then(function(token){
-            return fetch('https://graph.microsoft.com/v1.0/drives/'+ref.driveId+'/items/'+klantenId+'/children?$filter=name eq %27'+encodeURIComponent(clientName)+'%27&$select=id,name', {
-              headers: {Authorization: 'Bearer '+token}
-            }).then(function(r){ return r.json(); });
-          }).then(function(res){
-            var clientId = res.value && res.value.length > 0 ? res.value[0].id : clientRes.id;
-            if(!clientId) throw new Error('Klantmap niet gevonden na aanmaken.');
-            // Stap 3: maak submappen aan
-            return Promise.all(SP_CLIENT_SUBFOLDERS.map(function(sub){
-              return spCreateFolder(ref.driveId, clientId, sub);
-            }));
-          });
-        });
+        var clientFolder = (res.value||[]).find(function(x){ return x.name === clientName; });
+        if(!clientFolder) throw new Error('Klantmap niet gevonden na aanmaken.');
+        // Stap 2: submappen aanmaken
+        return Promise.all(SP_CLIENT_SUBFOLDERS.map(function(sub){
+          return spCreateFolder(ref.driveId, clientFolder.id, sub);
+        }));
       });
     });
   }).catch(function(e){
     console.warn('SharePoint mappen aanmaken mislukt:', e);
-    // Geen blokkade — klant gewoon aangemaakt zonder mappen
   });
 }
 
