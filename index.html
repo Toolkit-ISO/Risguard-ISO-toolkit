@@ -1280,14 +1280,15 @@ function renderImplDetail(){
   // ── Intern dashboard panel ────────────────────────────────────────
   var dashRows=[];
   // Per domein: docs + preparers/reviewers
-  var allPreparers={},allReviewers={};
+  var allPreparers={},allReviewers={},allApprovers={};
   (c.domains||[]).forEach(function(dom){
     (dom.docs||[]).forEach(function(d){
       if(d.preparerName)allPreparers[d.preparerName]=(allPreparers[d.preparerName]||0)+1;
       if(d.reviewerName)allReviewers[d.reviewerName]=(allReviewers[d.reviewerName]||0)+1;
+      if(d.approvedBy)allApprovers[d.approvedBy]=(allApprovers[d.approvedBy]||0)+1;
     });
   });
-  var prepNames=Object.keys(allPreparers),revNames=Object.keys(allReviewers);
+  var prepNames=Object.keys(allPreparers),revNames=Object.keys(allReviewers),appNames=Object.keys(allApprovers);
   h+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:1.25rem;box-shadow:var(--sh)">';
   h+='<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Intern overzicht</div>';
   h+='<div style="display:flex;flex-wrap:wrap;gap:16px 32px">';
@@ -1314,6 +1315,16 @@ function renderImplDetail(){
     revNames.forEach(function(n){
       var cnt=allReviewers[n];
       h+='<span style="font-size:12px;color:var(--text);font-weight:500;background:#E1F5EE;border-radius:20px;padding:2px 10px">'+n+' <span style="font-size:10px;color:#0F6E56">'+cnt+' doc'+(cnt>1?'s':'')+'</span></span>';
+    });
+    h+='</div></div>';
+  }
+  // Goedgekeurders
+  if(appNames.length){
+    h+='<div><div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">&#10003; Goedgekeurd door</div>';
+    h+='<div style="display:flex;flex-wrap:wrap;gap:4px">';
+    appNames.forEach(function(n){
+      var cnt=allApprovers[n];
+      h+='<span style="font-size:12px;color:#0F6E56;font-weight:600;background:#E1F5EE;border-radius:20px;padding:2px 10px">'+n+' <span style="font-size:10px;color:#0F6E56;font-weight:400">'+cnt+' doc'+(cnt>1?'s':'')+'</span></span>';
     });
     h+='</div></div>';
   }
@@ -1517,12 +1528,8 @@ function renderDomainsTab(c){
           // Preparer / reviewer badges
           var roleHtml='';
           if(doc.preparerName){roleHtml+='<span style="font-size:10px;color:var(--text-muted);white-space:nowrap">&#9998; '+(doc.preparerName.split(' ')[0])+'</span>';}
-          if(doc.reviewerName){
-            if(roleHtml)roleHtml+=' ';
-            var revColor=doc.status==='approved'?'#0F6E56':'var(--text-muted)';
-            var revWeight=doc.status==='approved'?'600':'400';
-            roleHtml+='<span style="font-size:10px;color:'+revColor+';font-weight:'+revWeight+';white-space:nowrap">&#10003; '+(doc.reviewerName.split(' ')[0])+'</span>';
-          }
+          if(doc.reviewerName){if(roleHtml)roleHtml+=' ';roleHtml+='<span style="font-size:10px;color:var(--text-muted);white-space:nowrap">&#128065; '+(doc.reviewerName.split(' ')[0])+'</span>';}
+          if(doc.approvedBy){if(roleHtml)roleHtml+=' ';roleHtml+='<span style="font-size:10px;color:#0F6E56;font-weight:600;white-space:nowrap">&#10003; '+(doc.approvedBy.split(' ')[0])+(doc.approvedAt?' '+doc.approvedAt:'')+'</span>';}
           h+='<td><span class="badge '+bc+'">'+bl+'</span>'+(roleHtml?'<div style="margin-top:2px">'+roleHtml+'</div>':'')+'</td>';
           h+='<td style="font-size:11px;color:var(--text-muted)">'+(doc.date||'—')+'</td>';
           h+='<td style="display:flex;gap:3px">';
@@ -1572,15 +1579,15 @@ function cycleDomainDocStatus(di,doci){
     if(!confirm('"'+doc.name+'" instellen op In review?'))return;
   }
   if(next==='approved'){
-    // Reviewer is de goedkeurder — als leeg, automatisch ingelogde gebruiker invullen
-    var reviewerName=doc.reviewerName||(AUTH.user?AUTH.user.name:'');
-    var msg='"'+doc.name+'" goedkeuren'+(reviewerName?' als '+reviewerName:'')+' — weet je het zeker?';
-    if(!confirm(msg))return;
-    // Zet reviewer op ingelogde gebruiker als nog leeg
-    if(!doc.reviewerName&&AUTH.user){
-      doc.reviewerName=AUTH.user.name;
-      doc.reviewerId=AUTH.user.localAccountId;
-    }
+    var approverName=AUTH.user?AUTH.user.name:'onbekend';
+    if(!confirm('"'+doc.name+'" goedkeuren? Dit wordt vastgelegd als goedgekeurd door '+approverName+'.'))return;
+    doc.approvedBy=approverName;
+    doc.approvedById=AUTH.user?AUTH.user.localAccountId:'';
+    doc.approvedAt=today();
+  }
+  if(next!=='approved'){
+    // Status gaat terug, wis goedkeuring
+    doc.approvedBy='';doc.approvedById='';doc.approvedAt='';
   }
   doc.status=next;
   doc.date=today();
