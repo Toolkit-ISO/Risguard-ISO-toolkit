@@ -2316,10 +2316,12 @@ function exportSoaExcel(){
     {n:'xl/comments1.xml',d:commentsXml},
     {n:'xl/drawings/vmlDrawing1.vml',d:vmlXml},
   ])],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  var fileName=c.name.replace(/[^a-z0-9]/gi,'_')+'_SoA_'+td.replace(/-/g,'')+'.xlsx';
   var a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download=c.name.replace(/[^a-z0-9]/gi,'_')+'_SoA_'+td.replace(/-/g,'')+'.xlsx';
+  a.download=fileName;
   a.click();
+  spUploadToClientFolder(blob, fileName, 'Implementation', c.name);
 }
 function renderAuditDetail(c){
   if(!c)c=clients()[ST.sel];
@@ -4192,10 +4194,12 @@ function exportAuditWord(){
     {n:'word/media/logo.png',b:logoBytes},
     {n:'word/media/header_logo.png',b:headerLogoBytes}
   ])],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+  var fileName='Audit_Rapport_'+c.name.replace(/[^a-zA-Z0-9]/g,'_')+'_'+today()+'.docx';
   var url=URL.createObjectURL(blob);
   var a=document.createElement('a');a.href=url;
-  a.download='Audit_Rapport_'+c.name.replace(/[^a-zA-Z0-9]/g,'_')+'_'+today()+'.docx';
+  a.download=fileName;
   document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  spUploadToClientFolder(blob, fileName, 'Internal audit', c.name);
 }
 
 function saveFinding(ei){
@@ -4571,10 +4575,72 @@ function exportGapExcel(){
     {n:'xl/worksheets/_rels/sheet3.xml.rels',d:ws3Rels},
     {n:'xl/_rels/workbook.xml.rels',d:wbRels}
   ])],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  var fileName='GAP_Assessment_'+c.name.replace(/[^a-zA-Z0-9]/g,'_')+'_'+today()+'.xlsx';
   var url=URL.createObjectURL(blob);
   var a=document.createElement('a');a.href=url;
-  a.download='GAP_Assessment_'+c.name.replace(/[^a-zA-Z0-9]/g,'_')+'_'+today()+'.xlsx';
+  a.download=fileName;
   document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  spUploadToClientFolder(blob, fileName, 'Gap assessment', c.name);
+}
+
+// ═══════════════════════════════════════════
+// SHAREPOINT EXPORT UPLOAD
+// ═══════════════════════════════════════════
+
+// Upload een blob naar de juiste submap van de klant in SharePoint
+// subFolder: 'Gap assessment' | 'Implementation' | 'Internal audit'
+function spUploadToClientFolder(blob, fileName, subFolder, clientName){
+  if(!SP_SYNC.online || !AUTH.user){
+    console.warn('SP upload: niet online of niet ingelogd, sla over.');
+    return Promise.resolve();
+  }
+  return spGetKlantenRef().then(function(ref){
+    // Navigeer naar klantmap
+    return acquireToken().then(function(token){
+      return fetch('https://graph.microsoft.com/v1.0/drives/'+ref.driveId+'/items/'+ref.itemId+'/children?$select=id,name',{
+        headers:{Authorization:'Bearer '+token}
+      }).then(function(r){return r.json();});
+    }).then(function(res){
+      var clientFolder=(res.value||[]).find(function(x){return x.name===clientName;});
+      if(!clientFolder) throw new Error('Klantmap niet gevonden in SharePoint: '+clientName);
+      // Navigeer naar submap
+      return acquireToken().then(function(token){
+        return fetch('https://graph.microsoft.com/v1.0/drives/'+ref.driveId+'/items/'+clientFolder.id+'/children?$select=id,name',{
+          headers:{Authorization:'Bearer '+token}
+        }).then(function(r){return r.json();});
+      }).then(function(res2){
+        var subFolderItem=(res2.value||[]).find(function(x){return x.name===subFolder;});
+        if(!subFolderItem){
+          // Submap bestaat nog niet, aanmaken
+          return acquireToken().then(function(token){
+            return fetch('https://graph.microsoft.com/v1.0/drives/'+ref.driveId+'/items/'+clientFolder.id+'/children',{
+              method:'POST',
+              headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+              body:JSON.stringify({name:subFolder,folder:{},'@microsoft.graph.conflictBehavior':'fail'})
+            }).then(function(r){return r.json();});
+          }).then(function(created){
+            return {id:created.id};
+          });
+        }
+        return subFolderItem;
+      }).then(function(targetFolder){
+        // Upload bestand (overschrijft als het al bestaat)
+        return acquireToken().then(function(token){
+          return fetch('https://graph.microsoft.com/v1.0/drives/'+ref.driveId+'/items/'+targetFolder.id+':/'+encodeURIComponent(fileName)+':/content',{
+            method:'PUT',
+            headers:{Authorization:'Bearer '+token,'Content-Type':blob.type||'application/octet-stream'},
+            body:blob
+          }).then(function(r){return r.json();});
+        }).then(function(res){
+          if(res.error) throw new Error('Upload mislukt: '+res.error.message);
+          console.log('SP upload geslaagd: '+fileName+' → '+subFolder);
+          return res;
+        });
+      });
+    });
+  }).catch(function(e){
+    console.warn('SP export upload mislukt (niet blokkerend):', e);
+  });
 }
 
 // ═══════════════════════════════════════════
