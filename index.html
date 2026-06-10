@@ -1517,7 +1517,12 @@ function renderDomainsTab(c){
           // Preparer / reviewer badges
           var roleHtml='';
           if(doc.preparerName){roleHtml+='<span style="font-size:10px;color:var(--text-muted);white-space:nowrap">&#9998; '+(doc.preparerName.split(' ')[0])+'</span>';}
-          if(doc.reviewerName){if(roleHtml)roleHtml+=' ';roleHtml+='<span style="font-size:10px;color:var(--text-muted);white-space:nowrap">&#10003; '+(doc.reviewerName.split(' ')[0])+'</span>';}
+          if(doc.reviewerName){
+            if(roleHtml)roleHtml+=' ';
+            var revColor=doc.status==='approved'?'#0F6E56':'var(--text-muted)';
+            var revWeight=doc.status==='approved'?'600':'400';
+            roleHtml+='<span style="font-size:10px;color:'+revColor+';font-weight:'+revWeight+';white-space:nowrap">&#10003; '+(doc.reviewerName.split(' ')[0])+'</span>';
+          }
           h+='<td><span class="badge '+bc+'">'+bl+'</span>'+(roleHtml?'<div style="margin-top:2px">'+roleHtml+'</div>':'')+'</td>';
           h+='<td style="font-size:11px;color:var(--text-muted)">'+(doc.date||'—')+'</td>';
           h+='<td style="display:flex;gap:3px">';
@@ -1562,7 +1567,12 @@ function cycleDomainDocStatus(di,doci){
   var doc=c.domains[di].docs[doci];
   var cycle=['concept','review','approved'];
   var cur=cycle.indexOf(doc.status||'concept');
-  doc.status=cycle[(cur+1)%cycle.length];
+  var next=cycle[(cur+1)%cycle.length];
+  var labels={concept:'Concept',review:'In review',approved:'Goedgekeurd'};
+  if(next==='review'||next==='approved'){
+    if(!confirm('"'+doc.name+'" instellen op '+labels[next]+'?'))return;
+  }
+  doc.status=next;
   doc.date=today();
   saveDB();render();
 }
