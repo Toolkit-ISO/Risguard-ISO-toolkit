@@ -1319,7 +1319,7 @@ function renderImplDetail(){
   }
   // Geen preparer/reviewer ingevuld
   var docsWithoutPrep=allDomDocs.filter(function(d){return d.status!=='concept'&&!d.preparerName;}).length;
-    if(docsWithoutRev)h+='<div style="font-size:12px;color:#D97706">&#9888; '+docsWithoutRev+' goedgekeurde doc'+(docsWithoutRev>1?'s':'')+' zonder reviewer</div>';
+  var docsWithoutRev=allDomDocs.filter(function(d){return d.status==='approved'&&!d.reviewerName;}).length;
   if(docsWithoutPrep||docsWithoutRev){
     h+='<div><div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Aandacht</div>';
     if(docsWithoutPrep)h+='<div style="font-size:12px;color:#D97706">&#9888; '+docsWithoutPrep+' doc'+(docsWithoutPrep>1?'s zijn':' is')+' niet-concept zonder preparer</div>';
