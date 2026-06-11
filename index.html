@@ -606,7 +606,7 @@ function aDesc(id){return ANNEX_CTRL_DESC['A.'+id]||ANNEX_CTRL_DESC[id]||{};}
 
 var AUDIT_STATUSES=['open','compliant','ofi','minor','major'];
 var DB={impl:[],audit:[],gap:[]};
-var ST={module:'impl',view:'clients',sel:null,tab:'domains',modal:null,mdata:null,search:'',fSt:'',fCat:'',expandedPhase:null,auditTab:'clausules',auditGrp:'A.5',gapTab:'clausules',gapGrp:'A.5',gapSearch:'',gapFStatus:'',interviewGrp:'A.5',interviewSubTab:'annexa',soaGrp:'all',openNotes:{},openDomains:{}};
+var ST={module:'impl',view:'clients',sel:null,tab:'domains',modal:null,mdata:null,search:'',fSt:'',fCat:'',expandedPhase:null,auditTab:'clausules',auditGrp:'A.5',gapTab:'clausules',gapGrp:'A.5',gapSearch:'',gapFStatus:'',interviewGrp:'A.5',interviewSubTab:'annexa',soaGrp:'all',riskF:'all',riskFSt:'',openNotes:{},openDomains:{}};
 var importFiles=[];
 
 // ═══════════════════════════════════════════
@@ -786,17 +786,43 @@ function loadDB(){
   migrateDB(DB);
 }
 
+// Haal alleen de huidige versie (lastModifiedDateTime) van het SP-item op
+function spGetRemoteVersion(){
+  return spEnsureItem().then(function(){
+    return acquireToken().then(function(t){
+      return fetch(GRAPH+'/sites/'+SP_SYNC.siteId+'/lists/'+SP_SYNC.listId+'/items/'+SP_SYNC.itemId+'?$select=lastModifiedDateTime',{headers:{Authorization:'Bearer '+t}}).then(function(r){return r.json();});
+    });
+  }).then(function(item){return item.lastModifiedDateTime||null;});
+}
+
 function saveDB(){
   localStorage.setItem('rg_v7',JSON.stringify(DB));
   if(SP_SYNC.online&&AUTH.user){
     SP_SYNC.syncing=true;
-    spWriteDB(DB).then(function(){return spReadDB();}).then(function(r){SP_SYNC.lastVersion=r.version;}).catch(function(e){console.warn('SP save failed:',e);}).finally(function(){SP_SYNC.syncing=false;});
+    // Conflictdetectie: is het SP-item gewijzigd sinds onze laatste sync?
+    spGetRemoteVersion().then(function(remoteTs){
+      if(remoteTs&&SP_SYNC.lastVersion&&remoteTs!==SP_SYNC.lastVersion){
+        var keepMine=confirm('\u26A0 Conflict: een collega heeft intussen wijzigingen opgeslagen.\n\nOK \u2014 jouw versie opslaan (de recente wijzigingen van je collega worden overschreven)\nAnnuleren \u2014 versie van je collega laden (jouw laatste wijziging gaat verloren)');
+        if(!keepMine){
+          return spReadDB().then(function(result){
+            migrateDB(result.data);
+            DB=result.data;
+            localStorage.setItem('rg_v7',JSON.stringify(DB));
+            SP_SYNC.lastVersion=result.version;
+            render();
+          });
+        }
+      }
+      return spWriteDB(DB).then(function(){return spReadDB();}).then(function(r){SP_SYNC.lastVersion=r.version;});
+    }).catch(function(e){console.warn('SP save failed:',e);}).finally(function(){SP_SYNC.syncing=false;});
   }
 }
 function clients(){return DB[ST.module]||[];}
 
 function ini(n){return n.split(' ').filter(Boolean).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2)||'?';}
 function today(){return new Date().toISOString().slice(0,10);}
+// HTML-escape voor vrije-tekstvelden in innerHTML (XSS / kapotte rendering bij < > & ")
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 function implPct(c){var d=c.docs||[];if(!d.length)return 0;return Math.round(d.filter(function(x){return x.status==='approved';}).length/d.length*100);}
 function auditPct(c){
@@ -1177,7 +1203,7 @@ function render(){
     var c=clients()[ST.sel];
     if(!c){goHome();return;}
     var modLbl=ST.module==='impl'?'Implementatie':'Internal Audit';
-    bc.innerHTML='<button class="bc-link" onclick="goHome()">'+modLbl+'</button><span class="bc-sep">&#8250;</span><span class="bc-cur">'+c.name+'</span>';
+    bc.innerHTML='<button class="bc-link" onclick="goHome()">'+modLbl+'</button><span class="bc-sep">&#8250;</span><span class="bc-cur">'+esc(c.name)+'</span>';
     if(ST.module==='impl'){
       act.innerHTML='<button class="btn" onclick="openModal(\'importDocs\')">&#128193; Map importeren vanuit SharePoint</button>';
       con.innerHTML=renderImplDetail();
@@ -1343,8 +1369,9 @@ function renderImplDetail(){
   h+='</div></div>';
   // ── /Intern dashboard panel ───────────────────────────────────────
 
-  h+='<div class="tabs"><button class="tab'+(ST.tab==='domains'?' active':'')+'" onclick="setTab(\'domains\')">Domeinen</button><button class="tab'+(ST.tab==='soa'?' active':'')+'" onclick="setTab(\'soa\')">Statement of Applicability</button><button class="tab'+(ST.tab==='notes'?' active':'')+'" onclick="setTab(\'notes\')">Notities</button></div>';
+  h+='<div class="tabs"><button class="tab'+(ST.tab==='domains'?' active':'')+'" onclick="setTab(\'domains\')">Domeinen</button><button class="tab'+(ST.tab==='risks'?' active':'')+'" onclick="setTab(\'risks\')">Risicoregister</button><button class="tab'+(ST.tab==='soa'?' active':'')+'" onclick="setTab(\'soa\')">Statement of Applicability</button><button class="tab'+(ST.tab==='notes'?' active':'')+'" onclick="setTab(\'notes\')">Notities</button></div>';
   if(ST.tab==='domains')h+=renderDomainsTab(c);
+  else if(ST.tab==='risks')h+=renderRisksTab(c);
   else if(ST.tab==='soa')h+=renderSoaTab(c);
   else h+=renderNotesTab();
   return h;
@@ -2456,6 +2483,192 @@ function exportSoaExcel(){
   a.click();
   spUploadToClientFolder(blob, fileName, 'Implementation', c.name);
 }
+// ═══════════════════════════════════════════
+// RISICOREGISTER (clausule 6.1.2 / 6.1.3)
+// ═══════════════════════════════════════════
+var RISK_LVLS=['laag','midden','hoog'];
+var RISK_TREATMENTS=[['mitigeren','Mitigeren'],['accepteren','Accepteren'],['vermijden','Vermijden'],['overdragen','Overdragen']];
+var RISK_STATUSES=[['open','Open'],['in_behandeling','In behandeling'],['behandeld','Behandeld'],['geaccepteerd','Geaccepteerd']];
+
+// 3x3 matrix Laag/Midden/Hoog (geen cijfers, conform Risguard-methodiek)
+function riskLevel(k,i){
+  if(!k||!i)return '';
+  var n={laag:0,midden:1,hoog:2};
+  if(!(k in n)||!(i in n))return '';
+  var s=n[k]+n[i];
+  return s>=3?'hoog':s===2?'midden':'laag';
+}
+function riskResLevel(r){return(r.resLikelihood&&r.resImpact)?riskLevel(r.resLikelihood,r.resImpact):'';}
+function riskLbl(v){return v?v.charAt(0).toUpperCase()+v.slice(1).replace('_',' '):'';}
+function riskNum(r){return 'R-'+(r.num<10?'0'+r.num:r.num);}
+function riskLvlBadge(lvl){
+  if(!lvl)return '<span style="font-size:11px;color:var(--text-muted)">\u2014</span>';
+  var cls=lvl==='hoog'?'b-major':lvl==='midden'?'b-minor':'b-compliant';
+  return '<span class="badge '+cls+'">'+riskLbl(lvl)+'</span>';
+}
+
+function renderRisksTab(c){
+  c.risks=c.risks||[];
+  var risks=c.risks;
+  var h='';
+
+  // ── Samenvatting ──────────────────────────────────────────────────
+  var cnt={hoog:0,midden:0,laag:0};
+  risks.forEach(function(r){var l=riskLevel(r.likelihood,r.impact);if(cnt[l]!==undefined)cnt[l]++;});
+  var done=risks.filter(function(r){return r.status==='behandeld'||r.status==='geaccepteerd';}).length;
+  var pct=risks.length?Math.round(done/risks.length*100):0;
+  h+='<div style="display:flex;align-items:center;gap:16px;margin-bottom:1.25rem;padding:10px 14px;background:var(--white);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--sh)">';
+  h+='<div style="font-size:13px;font-weight:600;color:var(--text)">'+risks.length+' risico'+(risks.length!==1?'\u2019s':'')+'</div>';
+  h+='<div style="width:1px;height:18px;background:var(--border)"></div>';
+  h+='<div style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#DC2626;display:inline-block"></span><span style="font-size:12px;color:#DC2626">'+cnt.hoog+' Hoog</span></div>';
+  h+='<div style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#C05621;display:inline-block"></span><span style="font-size:12px;color:#C05621">'+cnt.midden+' Midden</span></div>';
+  h+='<div style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#0F6E56;display:inline-block"></span><span style="font-size:12px;color:#0F6E56">'+cnt.laag+' Laag</span></div>';
+  h+='<div style="flex:1;margin-left:8px"><div style="height:6px;background:#F0F0F0;border-radius:3px"><div style="height:6px;background:#0F6E56;border-radius:3px;width:'+pct+'%"></div></div></div>';
+  h+='<div style="font-size:12px;font-weight:600;color:var(--text)" title="Behandeld of geaccepteerd">'+pct+'% behandeld</div>';
+  h+='</div>';
+
+  // ── Risicomatrix (3x3) + acties ───────────────────────────────────
+  h+='<div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:1.25rem;flex-wrap:wrap">';
+  // Matrix
+  var mxBg={hoog:'#FEE2E2',midden:'#FFF3E0',laag:'#E1F5EE'};
+  var mxFg={hoog:'#DC2626',midden:'#C05621',laag:'#0F6E56'};
+  h+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;box-shadow:var(--sh)">';
+  h+='<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Risicomatrix (bruto)</div>';
+  h+='<table style="border-collapse:separate;border-spacing:3px"><tbody>';
+  ['hoog','midden','laag'].forEach(function(imp){
+    h+='<tr><td style="font-size:10px;color:var(--text-muted);padding-right:6px;text-align:right;white-space:nowrap">'+(imp==='hoog'?'Impact hoog':imp==='midden'?'midden':'laag')+'</td>';
+    RISK_LVLS.forEach(function(kans){
+      var lvl=riskLevel(kans,imp);
+      var n=risks.filter(function(r){return r.likelihood===kans&&r.impact===imp;}).length;
+      h+='<td style="width:46px;height:34px;text-align:center;border-radius:6px;background:'+mxBg[lvl]+';color:'+mxFg[lvl]+';font-size:13px;font-weight:700">'+(n||'')+'</td>';
+    });
+    h+='</tr>';
+  });
+  h+='<tr><td></td><td style="font-size:10px;color:var(--text-muted);text-align:center">laag</td><td style="font-size:10px;color:var(--text-muted);text-align:center">midden</td><td style="font-size:10px;color:var(--text-muted);text-align:center">hoog</td></tr>';
+  h+='<tr><td></td><td colspan="3" style="font-size:10px;color:var(--text-muted);text-align:center">Kans</td></tr>';
+  h+='</tbody></table></div>';
+  // Acties
+  h+='<div style="display:flex;flex-direction:column;gap:8px;margin-left:auto">';
+  h+='<button class="btn btn-primary" onclick="openModal(\'addRisk\',null)">+ Risico toevoegen</button>';
+  h+='<button class="btn btn-sm" onclick="exportRisksCsv()">&#8659; Export risicoregister (.csv)</button>';
+  h+='</div>';
+  h+='</div>';
+
+  // ── Filters ───────────────────────────────────────────────────────
+  h+='<div style="display:flex;gap:4px;margin-bottom:1rem;flex-wrap:wrap;align-items:center">';
+  [['all','Alle'],['hoog','Hoog'],['midden','Midden'],['laag','Laag']].forEach(function(f){
+    h+='<button onclick="ST.riskF=\''+f[0]+'\';render()" class="btn btn-sm '+(ST.riskF===f[0]?'btn-primary':'')+'">'+f[1]+'</button>';
+  });
+  h+='<select class="flt-sel" style="margin-left:8px" onchange="ST.riskFSt=this.value;render()"><option value="">Alle statussen</option>';
+  RISK_STATUSES.forEach(function(s){h+='<option value="'+s[0]+'"'+(ST.riskFSt===s[0]?' selected':'')+'>'+s[1]+'</option>';});
+  h+='</select></div>';
+
+  // ── Tabel ─────────────────────────────────────────────────────────
+  if(!risks.length){
+    h+='<div class="empty"><div class="empty-icon">&#9888;</div><div class="empty-title">Nog geen risico\u2019s</div><div class="empty-sub">Leg de risicobeoordeling vast (clausule 6.1.2) en koppel behandelmaatregelen aan Annex A controls (6.1.3).</div><button class="btn btn-primary" onclick="openModal(\'addRisk\',null)">+ Eerste risico toevoegen</button></div>';
+    return h;
+  }
+  var rows=risks.map(function(r,i){return{r:r,i:i};}).filter(function(x){
+    var ml=(ST.riskF==='all')||riskLevel(x.r.likelihood,x.r.impact)===ST.riskF;
+    var ms=!ST.riskFSt||x.r.status===ST.riskFSt;
+    return ml&&ms;
+  });
+  if(!rows.length){
+    h+='<div class="empty"><div class="empty-icon">&#128269;</div><div class="empty-title">Geen resultaten</div></div>';
+    return h;
+  }
+  var selSty='font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);padding:2px';
+  h+='<div class="tbl-wrap"><table style="table-layout:fixed"><colgroup><col style="width:44px"><col><col style="width:120px"><col style="width:78px"><col style="width:78px"><col style="width:74px"><col style="width:100px"><col style="width:74px"><col style="width:118px"><col style="width:56px"></colgroup>';
+  h+='<thead><tr><th>Nr</th><th>Risico</th><th>Eigenaar</th><th>Kans</th><th>Impact</th><th>Niveau</th><th>Behandeling</th><th>Restniveau</th><th>Status</th><th></th></tr></thead><tbody>';
+  rows.forEach(function(x){
+    var r=x.r,ri=x.i;
+    var lvl=riskLevel(r.likelihood,r.impact);
+    h+='<tr>';
+    h+='<td style="font-size:11px;color:var(--text-muted)">'+riskNum(r)+'</td>';
+    h+='<td style="font-size:12px"><div style="font-weight:600">'+esc(r.title)+'</div>';
+    if(r.desc)h+='<div style="font-size:11px;color:var(--text-muted);margin-top:2px">'+esc(r.desc.length>110?r.desc.substring(0,110)+'\u2026':r.desc)+'</div>';
+    if((r.controls||[]).length){
+      h+='<div style="margin-top:3px">'+r.controls.map(function(cv){return '<span style="display:inline-block;background:#EBF2FF;color:#1a6bbd;border-radius:4px;padding:0 5px;margin:1px 2px 1px 0;font-size:10px;white-space:nowrap">'+esc(cv)+'</span>';}).join('')+'</div>';
+    }
+    if(r.reviewDate)h+='<div style="font-size:10px;color:'+(r.reviewDate<today()?'#DC2626':'var(--text-muted)')+';margin-top:2px">Review: '+r.reviewDate+(r.reviewDate<today()?' \u26A0':'')+'</div>';
+    h+='</td>';
+    h+='<td style="font-size:12px">'+esc(r.owner||'\u2014')+'</td>';
+    h+='<td><select style="'+selSty+'" onchange="saveRiskField('+ri+',\'likelihood\',this.value)">'+RISK_LVLS.map(function(v){return '<option value="'+v+'"'+(r.likelihood===v?' selected':'')+'>'+riskLbl(v)+'</option>';}).join('')+'</select></td>';
+    h+='<td><select style="'+selSty+'" onchange="saveRiskField('+ri+',\'impact\',this.value)">'+RISK_LVLS.map(function(v){return '<option value="'+v+'"'+(r.impact===v?' selected':'')+'>'+riskLbl(v)+'</option>';}).join('')+'</select></td>';
+    h+='<td>'+riskLvlBadge(lvl)+'</td>';
+    h+='<td><select style="'+selSty+'" onchange="saveRiskField('+ri+',\'treatment\',this.value)">'+RISK_TREATMENTS.map(function(t){return '<option value="'+t[0]+'"'+(r.treatment===t[0]?' selected':'')+'>'+t[1]+'</option>';}).join('')+'</select></td>';
+    h+='<td>'+riskLvlBadge(riskResLevel(r))+'</td>';
+    h+='<td><select style="'+selSty+';font-weight:600" onchange="saveRiskField('+ri+',\'status\',this.value)">'+RISK_STATUSES.map(function(s){return '<option value="'+s[0]+'"'+(r.status===s[0]?' selected':'')+'>'+s[1]+'</option>';}).join('')+'</select></td>';
+    h+='<td style="white-space:nowrap"><button class="btn btn-sm" title="Bewerken" onclick="openModal(\'addRisk\','+ri+')">&#9998;</button> <button class="btn btn-sm" title="Verwijderen" onclick="delRisk('+ri+')">&#x2715;</button></td>';
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  return h;
+}
+
+function saveRiskField(ri,field,val){
+  var c=clients()[ST.sel];if(!c||!c.risks||!c.risks[ri])return;
+  c.risks[ri][field]=val;
+  saveDB();
+  render();
+}
+
+function delRisk(ri){
+  var c=clients()[ST.sel];if(!c||!c.risks||!c.risks[ri])return;
+  if(!confirm('Risico "'+(c.risks[ri].title||riskNum(c.risks[ri]))+'" verwijderen?'))return;
+  c.risks.splice(ri,1);
+  saveDB();render();
+}
+
+function saveRisk(ei){
+  var c=clients()[ST.sel];if(!c)return;
+  c.risks=c.risks||[];
+  var g=function(id){var el=document.getElementById(id);return el?el.value.trim():'';};
+  var title=g('m-rt');
+  if(!title){alert('Vul een risico-omschrijving (titel) in.');return;}
+  var isE=(ei!==null&&ei!==undefined);
+  var r=isE?c.risks[ei]:{num:c.risks.reduce(function(m,x){return Math.max(m,x.num||0);},0)+1,date:today()};
+  if(!r)return;
+  r.title=title;
+  r.desc=g('m-rd');
+  r.owner=g('m-ro');
+  r.reviewDate=g('m-rrev');
+  r.likelihood=g('m-rk');
+  r.impact=g('m-rim');
+  r.treatment=g('m-rtr');
+  r.status=g('m-rst');
+  r.plan=g('m-rp');
+  r.resLikelihood=g('m-rrk');
+  r.resImpact=g('m-rri');
+  r.controls=g('m-rc').split(',').map(function(s){
+    s=s.trim();
+    if(!s)return '';
+    if(/^\d/.test(s))s='A.'+s;
+    return s;
+  }).filter(Boolean);
+  if(!isE)c.risks.push(r);
+  saveDB();closeModal();render();
+}
+
+function exportRisksCsv(){
+  var c=clients()[ST.sel];if(!c)return;
+  var risks=c.risks||[];
+  if(!risks.length){alert('Geen risico\u2019s om te exporteren.');return;}
+  var stMap={};RISK_STATUSES.forEach(function(s){stMap[s[0]]=s[1];});
+  var trMap={};RISK_TREATMENTS.forEach(function(t){trMap[t[0]]=t[1];});
+  var q=function(s){return '"'+String(s==null?'':s).replace(/"/g,'""')+'"';};
+  var rows=[['Nr','Risico','Omschrijving','Risico-eigenaar','Kans','Impact','Risiconiveau (bruto)','Behandeling','Gekoppelde controls','Behandelplan','Restkans','Restimpact','Restniveau','Status','Reviewdatum','Aangemaakt']];
+  risks.forEach(function(r){
+    rows.push([riskNum(r),r.title,r.desc||'',r.owner||'',riskLbl(r.likelihood),riskLbl(r.impact),riskLbl(riskLevel(r.likelihood,r.impact)),trMap[r.treatment]||'',(r.controls||[]).join(', '),r.plan||'',riskLbl(r.resLikelihood),riskLbl(r.resImpact),riskLbl(riskResLevel(r)),stMap[r.status]||'',r.reviewDate||'',r.date||'']);
+  });
+  var csv='\uFEFF'+rows.map(function(rw){return rw.map(q).join(';');}).join('\r\n');
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='Risicoregister - '+c.name+'.csv';
+  a.click();
+}
+
 function renderAuditDetail(c){
   if(!c)c=clients()[ST.sel];
   if(!c)return '';
@@ -2642,6 +2855,27 @@ function renderModal(){
     var catOpts=CATS.map(function(ct){return'<option'+(d.category===ct?' selected':'')+'>'+ct+'</option>';}).join('');
     var stOpts=['concept','review','approved'].map(function(s){var l=s==='approved'?'Goedgekeurd':s==='review'?'In review':'Concept';return'<option value="'+s+'"'+(d.status===s?' selected':'')+'>'+l+'</option>';}).join('');
     root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-title">'+(isE?'Document bewerken':'Document toevoegen')+'</div><div class="field"><label>Documentnaam *</label><input id="m-dn" value="'+(d.name||'').replace(/"/g,'&quot;')+'" placeholder="Bijv. Information Security Policy" autofocus /></div><div class="field"><label>Link (optioneel)</label><input id="m-dl" value="'+(d.link||'').replace(/"/g,'&quot;')+'" placeholder="https://sharepoint.com/..." /></div><div class="field-row"><div class="field"><label>Categorie</label><select id="m-dc">'+catOpts+'</select></div><div class="field"><label>Status</label><select id="m-ds">'+stOpts+'</select></div></div><div class="field"><label>ISO 27001 control</label><select id="m-dco">'+ctrlOpts+'</select></div><div class="field-row"><div class="field"><label>Fase</label><select id="m-dp">'+phOpts+'</select></div><div class="field"><label>Datum</label><input type="date" id="m-dd" value="'+(d.date||today())+'" /></div></div><div class="modal-actions"><button class="btn" onclick="closeModal()">Annuleer</button><button class="btn btn-primary" onclick="saveDoc('+(isE?ei:'null')+')">'+( isE?'&#10003; Opslaan':'Toevoegen')+'</button></div></div></div>';
+
+  } else if(ST.modal==='addRisk'){
+    var rei=ST.mdata;var isER=(rei!==null&&rei!==undefined);
+    var rcl=clients()[ST.sel]||{};var rr=isER?((rcl.risks||[])[rei]||{}):{};
+    var lvlOpts=function(cur,empty){
+      var o=empty?'<option value=""'+(!cur?' selected':'')+'>\u2014 n.v.t.</option>':'';
+      RISK_LVLS.forEach(function(v){o+='<option value="'+v+'"'+((cur||(!empty?'midden':''))===v?' selected':'')+'>'+riskLbl(v)+'</option>';});
+      return o;
+    };
+    var trOpts=RISK_TREATMENTS.map(function(t){return '<option value="'+t[0]+'"'+((rr.treatment||'mitigeren')===t[0]?' selected':'')+'>'+t[1]+'</option>';}).join('');
+    var stOptsR=RISK_STATUSES.map(function(s){return '<option value="'+s[0]+'"'+((rr.status||'open')===s[0]?' selected':'')+'>'+s[1]+'</option>';}).join('');
+    root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:620px"><div class="modal-title">'+(isER?'Risico bewerken ('+riskNum(rr)+')':'Risico toevoegen')+'</div>'+
+      '<div class="field"><label>Risico *</label><input id="m-rt" value="'+esc(rr.title||'')+'" placeholder="Bijv. Ongeautoriseerde toegang tot klantgegevens" autofocus /></div>'+
+      '<div class="field"><label>Omschrijving (dreiging / kwetsbaarheid)</label><textarea id="m-rd" rows="2" placeholder="Wat kan er gebeuren en waardoor?">'+esc(rr.desc||'')+'</textarea></div>'+
+      '<div class="field-row"><div class="field"><label>Risico-eigenaar</label><input id="m-ro" value="'+esc(rr.owner||'')+'" placeholder="Naam of rol" /></div><div class="field"><label>Reviewdatum</label><input type="date" id="m-rrev" value="'+(rr.reviewDate||'')+'" /></div></div>'+
+      '<div class="field-row"><div class="field"><label>Kans</label><select id="m-rk">'+lvlOpts(rr.likelihood,false)+'</select></div><div class="field"><label>Impact</label><select id="m-rim">'+lvlOpts(rr.impact,false)+'</select></div></div>'+
+      '<div class="field-row"><div class="field"><label>Behandeling</label><select id="m-rtr">'+trOpts+'</select></div><div class="field"><label>Status</label><select id="m-rst">'+stOptsR+'</select></div></div>'+
+      '<div class="field"><label>Gekoppelde Annex A controls</label><input id="m-rc" value="'+esc((rr.controls||[]).join(', '))+'" placeholder="Bijv. A.5.15, A.8.2 (komma-gescheiden)" /></div>'+
+      '<div class="field"><label>Behandelplan</label><textarea id="m-rp" rows="2" placeholder="Welke maatregelen, door wie, wanneer?">'+esc(rr.plan||'')+'</textarea></div>'+
+      '<div class="field-row"><div class="field"><label>Restkans (na behandeling)</label><select id="m-rrk">'+lvlOpts(rr.resLikelihood,true)+'</select></div><div class="field"><label>Restimpact (na behandeling)</label><select id="m-rri">'+lvlOpts(rr.resImpact,true)+'</select></div></div>'+
+      '<div class="modal-actions"><button class="btn" onclick="closeModal()">Annuleer</button><button class="btn btn-primary" onclick="saveRisk('+(isER?rei:'null')+')">'+(isER?'&#10003; Opslaan':'Toevoegen')+'</button></div></div></div>';
 
   } else if(ST.modal==='importDocs'){
     var spErr=ST._spImportError||'';
@@ -2969,7 +3203,7 @@ function showControlDesc(type,cid,reqEnc,qEnc,docEnc,nameEnc){
   root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-title">'+xe(cid)+' &mdash; '+xe(name)+'</div><div class="field"><label>'+(type==='clause'?'Vereiste (ISO 27001:2022)':'Control omschrijving')+'</label><div class="desc-box">'+nl(req)+'</div></div>'+qBlock+docBlock+'<div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">Sluiten</button></div></div></div>';
 }
 function closeModal(){ST.modal=null;ST.mdata=null;ST._ddShowAll=null;renderModal();}
-function setTab(t){if(t==='phases'||t==='docs')t='domains';ST.tab=t;ST.search='';ST.fSt='';ST.fCat='';ST.expandedPhase=null;render();}
+function setTab(t){if(t==='phases'||t==='docs')t='domains';ST.tab=t;ST.search='';ST.fSt='';ST.fCat='';ST.riskF='all';ST.riskFSt='';ST.expandedPhase=null;render();}
 function setAuditTab(t){ST.auditTab=t;render();}
 function togglePhase(pi){ST.expandedPhase=ST.expandedPhase===pi?null:pi;render();}
 function switchModule(m){ST.module=m;ST.view='clients';ST.sel=null;ST.gapTab='clausules';render();}
