@@ -1535,6 +1535,7 @@ function renderDomainsTab(c){
           h+='<td style="display:flex;gap:3px">';
           h+='<button class="btn btn-sm" onclick="cycleDomainDocStatus('+di+','+doci+')" title="Status" style="font-size:12px">&#8635;</button>';
           h+='<button class="btn btn-sm btn-edit" onclick="openModal(\'editDomainDoc\',{di:'+di+',doci:'+doci+'})" title="Bewerken">&#9998;</button>';
+          h+='<button class="btn btn-sm" onclick="openModal(\'copyDomainDoc\',{di:'+di+',doci:'+doci+'})" title="Kopieer naar ander domein" style="font-size:12px">&#128203;</button>';
           h+='<button onclick="toggleDomainDocNote(\''+noteId+'\')" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 5px;font-size:11px;cursor:pointer;color:var(--text-muted)" title="Notitie">'+(hasNote?'&#128221;':'&#128172;')+'</button>';
           h+='<button class="btn btn-sm btn-danger" onclick="delDomainDoc('+di+','+doci+')">&#x2715;</button>';
           h+='</td></tr>';
@@ -1686,6 +1687,18 @@ function toggleDomainDocNote(id){
   ST.openNotes[id]=!ST.openNotes[id];
   var el=document.getElementById(id);
   if(el)el.style.display=ST.openNotes[id]?'':'none';
+}
+
+function executeCopyDomainDoc(fromDi,fromDoci){
+  var targetDi=parseInt((document.getElementById('cp-domain')||{}).value);
+  if(isNaN(targetDi))return;
+  var c=clients()[ST.sel];if(!c)return;
+  var srcDoc=c.domains[fromDi]&&c.domains[fromDi].docs?c.domains[fromDi].docs[fromDoci]:null;
+  if(!srcDoc)return;
+  var copy=JSON.parse(JSON.stringify(srcDoc));
+  if(!c.domains[targetDi].docs)c.domains[targetDi].docs=[];
+  c.domains[targetDi].docs.push(copy);
+  saveDB();closeModal();render();
 }
 
 function saveDomainDocNote(di,doci,val){
@@ -2787,6 +2800,24 @@ function renderModal(){
       '<div class="field"><label>Preparer</label><select id="dd-preparer"><option value="">— Geen</option>'+prepOpts+'</select></div>'+
       '<div class="field"><label>Reviewer</label><select id="dd-reviewer"><option value="">— Geen</option>'+revOpts+'</select></div>';
   });
+
+  } else if(ST.modal==='copyDomainDoc'){
+    var _cpdd=ST.mdata;
+    var _cpDi=_cpdd.di;
+    var _cpDoci=_cpdd.doci;
+    var _cpC=clients()[ST.sel];
+    var _cpDoc=_cpC&&_cpC.domains&&_cpC.domains[_cpDi]&&_cpC.domains[_cpDi].docs?_cpC.domains[_cpDi].docs[_cpDoci]:null;
+    if(!_cpDoc){root.innerHTML='';return;}
+    var _cpDomOpts=(_cpC.domains||[]).map(function(d,idx){
+      if(idx===_cpDi)return'';
+      return'<option value="'+idx+'">'+d.name+'</option>';
+    }).join('');
+    root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:420px">'+
+      '<div class="modal-title">&#128203; Kopieer naar domein</div>'+
+      '<div style="font-size:13px;color:var(--text-muted);margin-bottom:1.25rem">Koppel <strong>'+(_cpDoc.name||'dit document').replace(/</g,'&lt;')+'</strong> ook aan een ander domein. Het document wordt niet verplaatst.</div>'+
+      '<div class="field"><label>Kies domein</label><select id="cp-domain">'+_cpDomOpts+'</select></div>'+
+      '<div class="modal-actions"><button class="btn" onclick="closeModal()">Annuleer</button><button class="btn btn-primary" onclick="executeCopyDomainDoc('+_cpDi+','+_cpDoci+')">&#128203; Kopiëren</button></div>'+
+    '</div></div>';
 
   } else if(ST.modal==='addScopeDoc'){
     var ci2=ST.mdata;
