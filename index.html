@@ -170,6 +170,8 @@ body{font-family:DM Sans,sans-serif;background:var(--gray-bg);color:var(--text);
 .flt-sel:focus{outline:none;border-color:var(--blue);}
 .res-cnt{font-size:12px;color:var(--text-muted);margin-left:auto;}
 .tbl-wrap{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--sh);}
+.inbox-item{transition:background .15s,border-color .15s,box-shadow .15s;}
+.inbox-item:hover{background:#FFFBEB!important;border-color:#F59E0B!important;box-shadow:0 2px 8px rgba(245,158,11,.18)!important;cursor:grab;}
 table{width:100%;border-collapse:collapse;}
 th{text-align:left;font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--gray-bg);}
 td{padding:10px 14px;font-size:13px;border-bottom:1px solid var(--border);vertical-align:middle;}
@@ -722,6 +724,41 @@ function spUpdateBadge(){
   }
 }
 
+// ── Uitgestelde render bij gebruikersinteractie ──────────────────
+// Als de gebruiker bezig is (dropdown open, input gefocust, hover op knop),
+// sla render op en voer hem pas uit als de interactie klaar is.
+var _renderPending = false;
+var _renderDeferTimer = null;
+
+function userIsInteracting(){
+  var el = document.activeElement;
+  if(el && (el.tagName==='SELECT'||el.tagName==='INPUT'||el.tagName==='TEXTAREA'))return true;
+  // Check for open native select (any select that has focus or is hovered)
+  var selects = document.querySelectorAll('select');
+  for(var i=0;i<selects.length;i++){if(selects[i]===document.activeElement)return true;}
+  return false;
+}
+
+function scheduleDeferredRender(){
+  if(_renderDeferTimer)clearTimeout(_renderDeferTimer);
+  _renderDeferTimer=setTimeout(function(){
+    if(!userIsInteracting()){
+      _renderPending=false;
+      _renderDeferTimer=null;
+      renderNow();
+    } else {
+      // Still interacting, try again in 1s
+      scheduleDeferredRender();
+    }
+  },1000);
+}
+
+function renderNow(){
+  _renderPending=false;
+  // Call original render logic
+  _renderCore();
+}
+
 function spPoll(){
   if(!AUTH.ready||!AUTH.user||SP_SYNC.syncing)return;
   spEnsureItem().then(function(){
@@ -737,7 +774,13 @@ function spPoll(){
         DB=result.data;
         localStorage.setItem('rg_v7',JSON.stringify(DB));
         SP_SYNC.lastVersion=result.version;
-        render();
+        // Niet renderen als gebruiker bezig is met interactie (dropdown, input)
+        if(userIsInteracting()){
+          _renderPending=true;
+          scheduleDeferredRender();
+        } else {
+          render();
+        }
       });
     }
   }).catch(function(e){console.warn('SP poll error:',e);});
@@ -1198,7 +1241,17 @@ function cleanName(fn){return fn.replace(/\.(docx?|xlsx?|pdf|pptx?)$/i,'').repla
 // ═══════════════════════════════════════════
 // RENDER ROUTER
 // ═══════════════════════════════════════════
+// render() checks for active user interaction before rebuilding DOM
 function render(){
+  if(userIsInteracting&&userIsInteracting()){
+    _renderPending=true;
+    scheduleDeferredRender();
+    return;
+  }
+  _renderCore();
+}
+
+function _renderCore(){
   var bc=document.getElementById('topbar-bc');
   var act=document.getElementById('topbar-act');
   var con=document.getElementById('content');
