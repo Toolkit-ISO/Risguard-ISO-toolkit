@@ -3218,9 +3218,13 @@ function openClient(i){
 // ═══════════════════════════════════════════
 // SHAREPOINT MAP AANMAKEN BIJ NIEUWE KLANT
 // ═══════════════════════════════════════════
-// ═══════════════════════════════════════════
 // ORGANISATIE GEBRUIKERS (preparer / reviewer)
 // ═══════════════════════════════════════════
+// Zet hier de Object ID van de Azure AD-groep met Risguard-medewerkers.
+// Thom: Entra ID → Groups → groep aanklikken → Object ID (bovenaan).
+// Nog geen groep? Maak een Security-groep "Risguard Medewerkers" aan en plak de ID hier.
+var RISGUARD_GROUP_ID = '7f1c41d0-0884-437d-a9a8-354b81b55416'; // Risguard medewerkers groep
+
 var SP_USERS_CACHE = null; // {users: [{id,name,email}], ts: timestamp}
 
 function fetchOrgUsers(){
@@ -3228,17 +3232,23 @@ function fetchOrgUsers(){
     return Promise.resolve(SP_USERS_CACHE.users);
   }
   return msalInstance.acquireTokenSilent({scopes:['User.Read.All'],account:AUTH.user}).then(function(r){return r.accessToken;}).catch(function(){return acquireToken();}).then(function(token){
-    return fetch('https://graph.microsoft.com/v1.0/users?$select=id,displayName,mail,userPrincipalName&$top=100&$filter=accountEnabled eq true',{
-      headers:{Authorization:'Bearer '+token}
-    }).then(function(r){return r.json();});
+    // Groep-ID ingesteld: haal alleen leden van die groep op.
+    // Geen ID: haal alle actieve gebruikers op (tijdelijke fallback).
+    var url = RISGUARD_GROUP_ID
+      ? 'https://graph.microsoft.com/v1.0/groups/'+RISGUARD_GROUP_ID+'/members?$select=id,displayName,mail,userPrincipalName&$top=999'
+      : 'https://graph.microsoft.com/v1.0/users?$select=id,displayName,mail,userPrincipalName&$top=999&$filter=accountEnabled eq true';
+    return fetch(url, {headers:{Authorization:'Bearer '+token}}).then(function(r){return r.json();});
   }).then(function(res){
     if(res.error){
-      console.warn('fetchOrgUsers: no permission, using fallback.',res.error.message);
-      return null; // fallback: null = vrij tekstveld tonen
+      console.warn('fetchOrgUsers: groep niet gevonden of geen rechten:',res.error.message);
+      return null; // fallback: vrij tekstveld
     }
-    var users=(res.value||[]).map(function(u){
-      return {id:u.id, name:u.displayName||u.userPrincipalName, email:u.mail||u.userPrincipalName};
-    });
+    var users=(res.value||[])
+      .filter(function(u){return u['@odata.type']!=='#microsoft.graph.group';}) // geneste groepen overslaan
+      .map(function(u){
+        return {id:u.id, name:u.displayName||u.userPrincipalName, email:u.mail||u.userPrincipalName};
+      })
+      .sort(function(a,b){return a.name.localeCompare(b.name,'nl');});
     SP_USERS_CACHE={users:users,ts:Date.now()};
     return users;
   }).catch(function(e){
