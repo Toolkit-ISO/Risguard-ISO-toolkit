@@ -1472,6 +1472,59 @@ function renderDomainsTab(c){
     h+='</div></div>';
   }
 
+  // ── IN REVIEW SECTIE (voor reviewer) ────────────────────────────
+  var allReviewDocs=[];
+  c.domains.forEach(function(dom,di){
+    (dom.docs||[]).forEach(function(doc,doci){
+      if(doc.status==='review')allReviewDocs.push({doc:doc,di:di,doci:doci,domName:dom.name});
+    });
+  });
+  // Alleen tonen als er iets in review staat
+  if(allReviewDocs.length){
+    var myId=AUTH.user?AUTH.user.localAccountId:'';
+    var myName=AUTH.user?AUTH.user.name:'';
+    // Onderverdeel: voor mij als reviewer, en overige
+    var forMe=allReviewDocs.filter(function(x){
+      return(myId&&x.doc.reviewerId&&x.doc.reviewerId===myId)||(myName&&x.doc.reviewerName&&x.doc.reviewerName===myName);
+    });
+    var other=allReviewDocs.filter(function(x){return forMe.indexOf(x)===-1;});
+    h+='<div style="background:#EEF6FF;border:1px solid #BFDBFE;border-radius:var(--radius);padding:14px 16px;margin-bottom:1.25rem">';
+    h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">';
+    h+='<span style="font-size:15px">&#128338;</span>';
+    h+='<div style="font-size:13px;font-weight:700;color:#1e40af">In review &mdash; '+allReviewDocs.length+' document'+(allReviewDocs.length!==1?'en':'')+' wacht'+(allReviewDocs.length===1?'':'en')+' op beoordeling</div>';
+    h+='</div>';
+    function buildReviewRow(x){
+      var doc=x.doc,di=x.di,doci=x.doci;
+      var isPreparer=(myId&&doc.preparerId&&myId===doc.preparerId)||(myName&&doc.preparerName&&myName===doc.preparerName);
+      var approveBtn=isPreparer
+        ?'<button class="btn btn-sm" title="Je bent preparer van dit document" style="opacity:.45;cursor:not-allowed" onclick="alert(\'\u26D4 Je kunt dit document niet goedkeuren omdat je als preparer bent aangewezen.\')">&#10003; Goedkeuren</button>'
+        :'<button class="btn btn-sm" style="background:#E1F5EE;color:#0F6E56;border-color:#86efac;font-weight:600" onclick="cycleDomainDocStatus('+di+','+doci+')" title="Goedkeuren">&#10003; Goedkeuren</button>';
+      var docLink=doc.link?'<a href="'+esc(doc.link)+'" target="_blank" style="font-size:11px;color:var(--blue);margin-left:6px">&#128196; openen</a>':'';
+      var prepLabel=doc.preparerName?'<span style="font-size:10px;color:var(--text-muted)">&#9998; '+esc(doc.preparerName)+'</span>':'';
+      var revLabel=doc.reviewerName?'<span style="font-size:10px;color:#1a6bbd">&#10003; '+esc(doc.reviewerName)+'</span>':'';
+      return'<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:white;border:1px solid #BFDBFE;border-radius:7px;margin-bottom:5px">'
+        +'<div style="flex:1;min-width:0">'
+        +'<div style="font-size:13px;font-weight:600;color:var(--text)">'+esc(doc.name)+docLink+'</div>'
+        +'<div style="display:flex;gap:8px;margin-top:2px;flex-wrap:wrap">'
+        +'<span style="font-size:10px;color:var(--text-muted);background:#F0F4F8;border-radius:4px;padding:1px 6px">'+esc(x.domName)+'</span>'
+        +(prepLabel?prepLabel:'')
+        +(revLabel?revLabel:'')
+        +'</div>'
+        +'</div>'
+        +approveBtn
+        +'</div>';
+    }
+    if(forMe.length){
+      h+='<div style="font-size:11px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">&#128100; Toegewezen aan jou ('+forMe.length+')</div>';
+      forMe.forEach(function(x){h+=buildReviewRow(x);});
+    }
+    if(other.length){
+      if(forMe.length)h+='<div style="font-size:11px;font-weight:700;color:#5A6B7E;text-transform:uppercase;letter-spacing:.06em;margin:10px 0 6px">Overige ('+other.length+')</div>';
+      other.forEach(function(x){h+=buildReviewRow(x);});
+    }
+    h+='</div>';
+  }
+
   // ── DOMAIN TOOLBAR ───────────────────────────────────────────────
   h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">';
   h+='<div style="font-size:13px;color:var(--text-muted)">'+c.domains.length+' domeinen &middot; '+totalDocs+' documenten totaal</div>';
@@ -2991,9 +3044,10 @@ function renderModal(){
     var _c=clients()[ST.sel];
     var _dom=_c&&_c.domains?_c.domains[_di]:{name:'?',docs:[]};
     var _existingDoc=(_doci!==null&&_doci!==undefined)?(_dom.docs[_doci]||{}):{};
+    var _curStatus=_existingDoc.status||'concept';
     var _stOpts=['concept','review','approved'].map(function(s){
       var l=s==='approved'?'Goedgekeurd':s==='review'?'In review':'Concept';
-      return'<option value="'+s+'"'+(_existingDoc.status===s?' selected':'')+'>'+l+'</option>';
+      return'<option value="'+s+'"'+(_curStatus===s?' selected':'')+'>'+l+'</option>';
     }).join('');
     var _catOpts=CATS.map(function(ct){return'<option value="'+ct+'"'+(_existingDoc.category===ct?' selected':'')+'>'+ct+'</option>';}).join('');
     // Existing controls on this doc (support both old string and new array)
