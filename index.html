@@ -700,6 +700,8 @@ function spWriteDB(db){
       }).then(function(r){return r.json();});
     }).then(function(res){
       if(res.error)throw new Error(res.error.message);
+      // Update lastVersion direct vanuit de PATCH-response zodat de poll weet dat dit onze eigen write was
+      if(res.lastModifiedDateTime){SP_SYNC.lastVersion=res.lastModifiedDateTime;}
       return res;
     });
   });
@@ -799,21 +801,28 @@ function saveDB(){
   localStorage.setItem('rg_v7',JSON.stringify(DB));
   if(SP_SYNC.online&&AUTH.user){
     SP_SYNC.syncing=true;
-    // Conflictdetectie: is het SP-item gewijzigd sinds onze laatste sync?
     spGetRemoteVersion().then(function(remoteTs){
+      // Alleen een echte conflictmelding tonen als het tijdsverschil meer dan 30 seconden is.
+      // Kleinere verschillen zijn poll-ruis (de achtergrondpoll werkt elk 10 seconden).
       if(remoteTs&&SP_SYNC.lastVersion&&remoteTs!==SP_SYNC.lastVersion){
-        var keepMine=confirm('\u26A0 Conflict: een collega heeft intussen wijzigingen opgeslagen.\n\nOK \u2014 jouw versie opslaan (de recente wijzigingen van je collega worden overschreven)\nAnnuleren \u2014 versie van je collega laden (jouw laatste wijziging gaat verloren)');
-        if(!keepMine){
-          return spReadDB().then(function(result){
-            migrateDB(result.data);
-            DB=result.data;
-            localStorage.setItem('rg_v7',JSON.stringify(DB));
-            SP_SYNC.lastVersion=result.version;
-            render();
-          });
+        var diffSec=Math.abs(new Date(remoteTs).getTime()-new Date(SP_SYNC.lastVersion).getTime())/1000;
+        if(diffSec>30){
+          var keepMine=confirm('\u26A0 Conflict: een collega heeft intussen wijzigingen opgeslagen.\n\nOK \u2014 jouw versie opslaan (de recente wijzigingen van je collega worden overschreven)\nAnnuleren \u2014 versie van je collega laden (jouw laatste wijziging gaat verloren)');
+          if(!keepMine){
+            return spReadDB().then(function(result){
+              migrateDB(result.data);
+              DB=result.data;
+              localStorage.setItem('rg_v7',JSON.stringify(DB));
+              SP_SYNC.lastVersion=result.version;
+              render();
+            });
+          }
+        } else {
+          // Klein verschil: poll-ruis, versie bijwerken zonder melding
+          SP_SYNC.lastVersion=remoteTs;
         }
       }
-      return spWriteDB(DB).then(function(){return spReadDB();}).then(function(r){SP_SYNC.lastVersion=r.version;});
+      return spWriteDB(DB);
     }).catch(function(e){console.warn('SP save failed:',e);}).finally(function(){SP_SYNC.syncing=false;});
   }
 }
@@ -1603,6 +1612,23 @@ function cycleDomainDocStatus(di,doci){
   var cycle=['concept','review','approved'];
   var cur=cycle.indexOf(doc.status||'concept');
   var next=cycle[(cur+1)%cycle.length];
+
+  // ── Blokkeer goedkeuring door de preparer van dit document ────────
+  if(next==='approved'){
+    var myId=AUTH.user?AUTH.user.localAccountId:'';
+    var myName=AUTH.user?AUTH.user.name:'';
+    var isPreparer=(myId&&doc.preparerId&&myId===doc.preparerId)||(myName&&doc.preparerName&&myName===doc.preparerName);
+    if(isPreparer){
+      alert('\u26D4 Je kunt dit document niet goedkeuren omdat je als preparer bent aangewezen.\nLaat de reviewer "'+( doc.reviewerName||'reviewer')+'" het document goedkeuren.');
+      return;
+    }
+  }
+
+  // ── Bevestiging bij terugzetten naar concept (van goedgekeurd) ────
+  if(next==='concept'&&doc.status==='approved'){
+    if(!confirm('"'+doc.name+'" staat op Goedgekeurd. Weet je zeker dat je de status wilt resetten naar Concept?\n\nDe goedkeuring van '+(doc.approvedBy||'onbekend')+' wordt gewist.'))return;
+  }
+
   if(next==='review'){
     if(!confirm('"'+doc.name+'" instellen op In review?'))return;
   }
