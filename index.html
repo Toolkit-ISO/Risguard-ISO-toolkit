@@ -285,6 +285,7 @@ tbody tr:hover td{background:#F7FAFD;}
     <button class="nav-item" id="nav-impl" onclick="switchModule('impl')">&#9672;&nbsp; Klantoverzicht</button>
     <div class="sidebar-section-bold">Internal Audit</div>
     <button class="nav-item" id="nav-audit" onclick="switchModule('audit')">&#9670;&nbsp; Klantoverzicht</button>
+    <button class="nav-item" id="nav-notifs" onclick="openModal('notifications',null)" style="position:relative">&#128276;&nbsp; Mijn notificaties<span id="notif-badge" style="display:none;position:absolute;right:12px;top:50%;transform:translateY(-50%);background:#E97132;color:#fff;border-radius:10px;font-size:10px;font-weight:700;padding:1px 6px;min-width:16px;text-align:center">0</span></button>
   </div>
   <div class="sidebar-footer">
     <div class="footer-badge"><div class="footer-dot"></div> Your IT Risk Partner</div>
@@ -1272,6 +1273,7 @@ function _renderCore(){
   // Schedule auto-resize after DOM update
   setTimeout(function(){document.querySelectorAll('textarea[oninput*="autoResize"]').forEach(function(ta){autoResize(ta);});},10);
 
+  updateNotifBadge();
   if(ST.view==='clients'){
     var lbl=ST.module==='impl'?'Implementatie \u2014 Klantoverzicht':ST.module==='audit'?'Internal Audit \u2014 Klantoverzicht':'Gap Assessment \u2014 Klantoverzicht';
     bc.innerHTML='<span class="bc-cur">'+lbl+'</span>';
@@ -1283,8 +1285,9 @@ function _renderCore(){
     var modLbl=ST.module==='impl'?'Implementatie':'Internal Audit';
     bc.innerHTML='<button class="bc-link" onclick="goHome()">'+modLbl+'</button><span class="bc-sep">&#8250;</span><span class="bc-cur">'+esc(c.name)+'</span>';
     if(ST.module==='impl'){
-      act.innerHTML='<button class="btn" onclick="openModal(\'importDocs\')">&#128193; Map importeren vanuit SharePoint</button>';
+      act.innerHTML='<button class="btn btn-primary" onclick="exportStatusReport()" style="margin-right:8px">&#128196; Statusrapport</button><button class="btn" onclick="openModal(\'importDocs\')">&#128193; Map importeren</button>';
       con.innerHTML=renderImplDetail();
+      updateNotifBadge();
       if(ST.tab==='docs')attachSearchEvents();
     } else if(ST.module==='audit') {
       act.innerHTML='<button class="btn" onclick="exportAuditWord()">&#8595; Word rapport</button>';
@@ -1626,6 +1629,9 @@ function renderDomainsTab(c){
       h+='<span style="font-size:11px;color:var(--text-muted);width:28px;text-align:right">'+pct+'%</span>';
     }
     h+='<button class="btn btn-sm" onclick="event.stopPropagation();openModal(\'addDomainDoc\','+di+')" title="Document toevoegen">+ Doc</button>';
+    // Bulk concept→review knop: alleen tonen als er concept-docs zijn
+    var _hasConcept=(docs.filter(function(d){return !d.status||d.status==='concept';}).length>0);
+    if(_hasConcept)h+='<button class="btn btn-sm" onclick="event.stopPropagation();bulkConceptToReview('+di+')" title="Alle concept-documenten naar In review" style="font-size:11px;color:var(--amber)">&#9654; Review</button>';
     h+='<button class="btn btn-sm btn-edit" onclick="event.stopPropagation();openModal(\'editDomain\','+di+')" title="Bewerken">&#9998;</button>';
     h+='<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();delDomain('+di+')" title="Verwijderen">&#x2715;</button>';
     h+='<span style="color:var(--text-muted);font-size:14px;margin-left:2px">'+(isOpen?'&#8743;':'&#8744;')+'</span>';
@@ -2834,6 +2840,179 @@ function exportRisksCsv(){
   a.click();
 }
 
+
+// ═══════════════════════════════════════════════════════════════════
+// NOTIFICATIES — documenten in review waarbij jij reviewer bent
+// over alle klanten heen (client-side, huidige sessie)
+// ═══════════════════════════════════════════════════════════════════
+function notifApprove(clientIdx,di,doci){
+  ST.sel=clientIdx;ST.module='impl';ST.view='detail';
+  setTab('domains');
+  cycleDomainDocStatus(di,doci);
+  closeModal();
+}
+
+function getMyNotifications(){
+  var myId=AUTH.user?AUTH.user.localAccountId:'';
+  var myName=AUTH.user?AUTH.user.name:'';
+  var notifs=[];
+  (DB.impl||[]).forEach(function(c){
+    (c.domains||[]).forEach(function(dom,di){
+      (dom.docs||[]).forEach(function(doc,doci){
+        if(doc.status!=='review')return;
+        var isMyReview=(myId&&doc.reviewerId&&myId===doc.reviewerId)||(myName&&doc.reviewerName&&myName===doc.reviewerName);
+        if(isMyReview)notifs.push({clientName:c.name,clientIdx:(DB.impl||[]).indexOf(c),domName:dom.name,di:di,doci:doci,doc:doc});
+      });
+    });
+  });
+  return notifs;
+}
+
+function updateNotifBadge(){
+  var badge=document.getElementById('notif-badge');
+  if(!badge)return;
+  var n=getMyNotifications().length;
+  badge.textContent=n;
+  badge.style.display=n>0?'':'none';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BULK STATUS — concept → review per domein
+// ═══════════════════════════════════════════════════════════════════
+function bulkConceptToReview(di){
+  var c=clients()[ST.sel];if(!c||!c.domains[di])return;
+  var dom=c.domains[di];
+  var conceptDocs=dom.docs.filter(function(d){return !d.status||d.status==='concept';});
+  if(!conceptDocs.length){alert('Geen concept-documenten in dit domein.');return;}
+  if(!confirm('Alle '+conceptDocs.length+' concept-documenten in "'+dom.name+'" instellen op In review?'))return;
+  var _myName=AUTH.user?AUTH.user.name:'';
+  conceptDocs.forEach(function(doc){
+    doc.status='review';
+    doc.reviewedAt=today();
+    doc.reviewedBy=_myName;
+    doc.date=today();
+  });
+  saveDB();render();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// STATUSRAPPORT EXPORT — mooi HTML rapport per klant
+// ═══════════════════════════════════════════════════════════════════
+function exportStatusReport(){
+  var c=clients()[ST.sel];if(!c)return;
+  var allDomDocs=(c.domains||[]).reduce(function(a,d){return a.concat(d.docs||[]);}, []);
+  var apr=allDomDocs.filter(function(d){return d.status==='approved';}).length;
+  var rev=allDomDocs.filter(function(d){return d.status==='review';}).length;
+  var con=allDomDocs.filter(function(d){return !d.status||d.status==='concept';}).length;
+  var total=allDomDocs.length;
+  var pct=total?Math.round(apr/total*100):0;
+
+  // Risico samenvatting
+  var risks=c.risks||[];
+  var rHoog=risks.filter(function(r){return riskLevel(r.likelihood,r.impact)==='hoog';}).length;
+  var rMid=risks.filter(function(r){return riskLevel(r.likelihood,r.impact)==='midden';}).length;
+  var rLaag=risks.filter(function(r){return riskLevel(r.likelihood,r.impact)==='laag';}).length;
+  var rTreated=risks.filter(function(r){return r.status==='behandeld'||r.status==='geaccepteerd';}).length;
+
+  function badge(st){
+    if(st==='approved')return '<span style="background:#E1F5EE;color:#0F6E56;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600">✓ Goedgekeurd</span>';
+    if(st==='review')return '<span style="background:#FFF3E0;color:#C05621;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600">⏳ In review</span>';
+    return '<span style="background:#F1EFE8;color:#5F5E5A;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600">○ Concept</span>';
+  }
+
+  var domainRows='';
+  (c.domains||[]).forEach(function(dom){
+    var docs=dom.docs||[];
+    if(!docs.length){
+      domainRows+='<tr><td colspan="6" style="padding:8px 12px;color:#94A3B8;font-style:italic;font-size:12px;border-bottom:1px solid #E2E8F0">'+dom.name+' — geen documenten</td></tr>';
+      return;
+    }
+    docs.forEach(function(d,i){
+      domainRows+='<tr style="background:'+(i%2===0?'#fff':'#F8FAFC')+'">'
+        +'<td style="padding:8px 12px;font-size:12px;font-weight:500;border-bottom:1px solid #E2E8F0;border-left:3px solid #1F55A6;color:#0E2841">'+(i===0?'<span style="font-weight:700">'+dom.name+'</span><br>':'')+'<span style="font-weight:500">'+d.name+'</span></td>'
+        +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'+(d.category||'—')+'</td>'
+        +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0;font-family:monospace">'+(d.controls&&d.controls.length?d.controls.join(', '):(d.control||'—'))+'</td>'
+        +'<td style="padding:8px 12px;border-bottom:1px solid #E2E8F0">'+badge(d.status)+'</td>'
+        +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'+(d.preparerName?'<span style="color:#64748B">✎ '+d.preparerName+'</span>':'—')+'<br>'+(d.reviewerName?'<span style="color:#1F55A6">👁 '+d.reviewerName+'</span>':'')+(d.approvedBy?'<br><span style="color:#0F6E56;font-weight:600">✓ '+d.approvedBy+'</span>':'')+'</td>'
+        +'<td style="padding:8px 12px;font-size:11px;color:#94A3B8;border-bottom:1px solid #E2E8F0">'+(d.approvedAt?fmtDate(d.approvedAt):d.reviewedAt?'Review: '+fmtDate(d.reviewedAt):fmtDate(d.date))+'</td>'
+        +'</tr>';
+    });
+  });
+
+  var riskRows='';
+  if(risks.length){
+    risks.forEach(function(r){
+      var lvl=riskLevel(r.likelihood,r.impact);
+      var clr=lvl==='hoog'?'#DC2626':lvl==='midden'?'#C05621':'#0F6E56';
+      var bg=lvl==='hoog'?'#FEE2E2':lvl==='midden'?'#FFF3E0':'#E1F5EE';
+      var stMap={open:'Open',in_behandeling:'In behandeling',behandeld:'Behandeld',geaccepteerd:'Geaccepteerd'};
+      riskRows+='<tr>'
+        +'<td style="padding:7px 10px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0;font-family:monospace">'+riskNum(r)+'</td>'
+        +'<td style="padding:7px 10px;font-size:12px;font-weight:500;border-bottom:1px solid #E2E8F0">'+r.title+'</td>'
+        +'<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0"><span style="background:'+bg+';color:'+clr+';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">'+riskLbl(lvl)+'</span></td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'+(r.owner||'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;border-bottom:1px solid #E2E8F0">'+(stMap[r.status]||'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'+(r.reviewDate?fmtDate(r.reviewDate):'—')+'</td>'
+        +'</tr>';
+    });
+  }
+
+  var html='<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8"><title>Statusrapport — '+c.name+'</title>'
+    +'<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;color:#0E2841;background:#F1F4F7;padding:32px}@media print{body{background:#fff;padding:0}.no-print{display:none}}</style></head><body>'
+    // Header
+    +'<div style="background:#0E2841;color:#fff;border-radius:10px;padding:28px 36px;margin-bottom:24px;display:flex;align-items:flex-start;justify-content:space-between">'
+    +'<div><div style="font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;opacity:.7;margin-bottom:6px">Statusrapport ISO 27001</div>'
+    +'<div style="font-size:26px;font-weight:700;margin-bottom:4px">'+c.name+'</div>'
+    +(c.contact?'<div style="opacity:.8;font-size:13px">'+c.contact+'</div>':'')
+    +'<div style="margin-top:12px;font-size:12px;opacity:.7">Gegenereerd op '+fmtDate(today())+' door '+(AUTH.user?AUTH.user.name:'Risguard')+'</div></div>'
+    +'<div style="text-align:right">'
+    +(c.certDate?'<div style="background:rgba(255,255,255,.12);border-radius:8px;padding:10px 16px"><div style="font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.08em">Streefdatum certificering</div><div style="font-size:18px;font-weight:700;margin-top:2px">'+fmtDate(c.certDate)+'</div></div>':'')
+    +'</div></div>'
+    // Voortgang
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px">'
+    +'<div style="background:#fff;border-radius:8px;padding:18px 20px;border-top:4px solid #1F55A6"><div style="font-size:28px;font-weight:700;color:#1F55A6">'+pct+'%</div><div style="font-size:12px;color:#64748B;margin-top:2px">Voortgang (goedgekeurd)</div><div style="margin-top:8px;height:6px;background:#E2E8F0;border-radius:3px"><div style="height:6px;background:#1F55A6;border-radius:3px;width:'+pct+'%"></div></div></div>'
+    +'<div style="background:#fff;border-radius:8px;padding:18px 20px;border-top:4px solid #0F6E56"><div style="font-size:28px;font-weight:700;color:#0F6E56">'+apr+'</div><div style="font-size:12px;color:#64748B;margin-top:2px">Goedgekeurd</div></div>'
+    +'<div style="background:#fff;border-radius:8px;padding:18px 20px;border-top:4px solid #E97132"><div style="font-size:28px;font-weight:700;color:#E97132">'+rev+'</div><div style="font-size:12px;color:#64748B;margin-top:2px">In review</div></div>'
+    +'<div style="background:#fff;border-radius:8px;padding:18px 20px;border-top:4px solid #94A3B8"><div style="font-size:28px;font-weight:700;color:#64748B">'+con+'</div><div style="font-size:12px;color:#64748B;margin-top:2px">Concept</div></div>'
+    +'</div>'
+    // Documenten tabel
+    +'<div style="background:#fff;border-radius:8px;margin-bottom:24px;overflow:hidden">'
+    +'<div style="background:#1F55A6;color:#fff;padding:14px 20px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:space-between">'
+    +'<span>📄 Documenten per domein</span><span style="font-size:11px;opacity:.8">'+total+' documenten totaal</span></div>'
+    +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+    +'<thead><tr style="background:#F8FAFC"><th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #E2E8F0">Domein / Document</th>'
+    +'<th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #E2E8F0">Categorie</th>'
+    +'<th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #E2E8F0">Controls</th>'
+    +'<th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #E2E8F0">Status</th>'
+    +'<th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #E2E8F0">Rollen</th>'
+    +'<th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #E2E8F0">Datum</th>'
+    +'</tr></thead><tbody>'+domainRows+'</tbody></table></div></div>'
+    // Risicoregister
+    +(risks.length?
+      '<div style="background:#fff;border-radius:8px;margin-bottom:24px;overflow:hidden">'
+      +'<div style="background:#0E2841;color:#fff;padding:14px 20px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:space-between">'
+      +'<span>⚠ Risicoregister</span><span style="font-size:11px;opacity:.8">'+risks.length+' risico\'s &nbsp;·&nbsp; <span style="color:#fca5a5">'+rHoog+' hoog</span> &nbsp;·&nbsp; <span style="color:#fdba74">'+rMid+' midden</span> &nbsp;·&nbsp; <span style="color:#86efac">'+rLaag+' laag</span></span></div>'
+      +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+      +'<thead><tr style="background:#F8FAFC"><th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #E2E8F0">Nr</th>'
+      +'<th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #E2E8F0">Risico</th>'
+      +'<th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #E2E8F0">Niveau</th>'
+      +'<th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #E2E8F0">Eigenaar</th>'
+      +'<th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #E2E8F0">Status</th>'
+      +'<th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #E2E8F0">Review</th>'
+      +'</tr></thead><tbody>'+riskRows+'</tbody></table></div></div>'
+      :'')
+    // Footer
+    +'<div style="text-align:center;color:#94A3B8;font-size:11px;margin-top:8px">Risguard IT Risk &amp; Compliance &nbsp;·&nbsp; ISO 27001 Consultant Toolkit &nbsp;·&nbsp; Vertrouwelijk</div>'
+    +'<div class="no-print" style="margin-top:20px;text-align:center"><button onclick="window.print()" style="background:#1F55A6;color:#fff;border:none;border-radius:6px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer">🖨 Afdrukken / Opslaan als PDF</button></div>'
+    +'</body></html>';
+
+  var blob=new Blob([html],{type:'text/html;charset=utf-8'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='Statusrapport - '+c.name+' - '+today()+'.html';
+  a.click();
+}
+
 function renderAuditDetail(c){
   if(!c)c=clients()[ST.sel];
   if(!c)return '';
@@ -3020,6 +3199,258 @@ function renderModal(){
     var catOpts=CATS.map(function(ct){return'<option'+(d.category===ct?' selected':'')+'>'+ct+'</option>';}).join('');
     var stOpts=['concept','review','approved'].map(function(s){var l=s==='approved'?'Goedgekeurd':s==='review'?'In review':'Concept';return'<option value="'+s+'"'+(d.status===s?' selected':'')+'>'+l+'</option>';}).join('');
     root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-title">'+(isE?'Document bewerken':'Document toevoegen')+'</div><div class="field"><label>Documentnaam *</label><input id="m-dn" value="'+(d.name||'').replace(/"/g,'&quot;')+'" placeholder="Bijv. Information Security Policy" autofocus /></div><div class="field"><label>Link (optioneel)</label><input id="m-dl" value="'+(d.link||'').replace(/"/g,'&quot;')+'" placeholder="https://sharepoint.com/..." /></div><div class="field-row"><div class="field"><label>Categorie</label><select id="m-dc">'+catOpts+'</select></div><div class="field"><label>Status</label><select id="m-ds">'+stOpts+'</select></div></div><div class="field"><label>ISO 27001 control</label><select id="m-dco">'+ctrlOpts+'</select></div><div class="field-row"><div class="field"><label>Fase</label><select id="m-dp">'+phOpts+'</select></div><div class="field"><label>Datum</label><input type="date" id="m-dd" value="'+(d.date||today())+'" /></div></div><div class="modal-actions"><button class="btn" onclick="closeModal()">Annuleer</button><button class="btn btn-primary" onclick="saveDoc('+(isE?ei:'null')+')">'+( isE?'&#10003; Opslaan':'Toevoegen')+'</button></div></div></div>';
+
+  } else if(ST.modal==='notifications'){
+    var notifs=getMyNotifications();
+    var myName=AUTH.user?AUTH.user.name:'';
+    var mh='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:600px"><div class="modal-title">&#128276; Mijn notificaties</div>';
+    if(!notifs.length){
+      mh+='<div style="text-align:center;padding:32px 0;color:var(--text-muted)"><div style="font-size:32px;margin-bottom:12px">✓</div><div style="font-size:14px;font-weight:600">Geen openstaande reviews</div><div style="font-size:12px;margin-top:4px">Alle documenten waarbij jij reviewer bent zijn goedgekeurd of staan nog op concept.</div></div>';
+    } else {
+      mh+='<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">'+notifs.length+' document'+(notifs.length!==1?'en':'')+' wacht'+(notifs.length===1?'':'en')+' op jouw review als <strong>'+myName+'</strong>.</div>';
+      notifs.forEach(function(x){
+        var doc=x.doc;
+        var isPreparer=(AUTH.user&&(AUTH.user.localAccountId===doc.preparerId||AUTH.user.name===doc.preparerName));
+              var approveBtn=isPreparer
+          ?'<button class="btn btn-sm" style="opacity:.45;cursor:not-allowed" title="Je bent preparer">&#10003; Goedkeuren</button>'
+          :'<button class="btn btn-sm" style="background:#E1F5EE;color:#0F6E56;border-color:#86efac;font-weight:600" onclick="notifApprove('+x.clientIdx+','+x.di+','+x.doci+')">&#10003; Goedkeuren</button>';
+        mh+='<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:8px">'
+          +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:13px;font-weight:600;color:var(--text)">'+esc(doc.name)+'</div>'
+          +'<div style="display:flex;gap:8px;margin-top:3px;flex-wrap:wrap">'
+          +'<span style="font-size:11px;background:#EBF2FF;color:var(--blue);border-radius:4px;padding:1px 7px;font-weight:600">'+esc(x.clientName)+'</span>'
+          +'<span style="font-size:11px;color:var(--text-muted)">'+esc(x.domName)+'</span>'
+          +(doc.reviewedAt?'<span style="font-size:11px;color:var(--amber)">&#128197; '+fmtDate(doc.reviewedAt)+'</span>':'')
+          +(doc.preparerName?'<span style="font-size:11px;color:var(--text-muted)">&#9998; '+esc(doc.preparerName)+'</span>':'')
+          +'</div></div>'
+          +(doc.link?'<a href="'+esc(doc.link)+'" target="_blank" class="btn btn-sm" style="font-size:11px">&#128196;</a>':'')
+          +approveBtn
+          +'</div>';
+      });
+    }
+    mh+='<div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">Sluiten</button></div></div></div>';
+    root.innerHTML=mh;
+
+  }
+}
+
+function renderAuditDetail(c){
+  if(!c)c=clients()[ST.sel];
+  if(!c)return '';
+  var rows=c.auditControls||[];
+  if(ST.auditGrp&&ST.auditGrp!=='all')rows=rows.filter(function(x){return x.group===ST.auditGrp;});
+  var ap=rows.filter(function(x){return x.applicable;});
+  var conf=ap.filter(function(x){return x.status==='compliant';}).length;
+  var minor=ap.filter(function(x){return x.status==='minor';}).length;
+  var major=ap.filter(function(x){return x.status==='major';}).length;
+  var open=ap.filter(function(x){return !x.status||x.status==='open';}).length;
+  var p=ap.length?Math.round(conf/ap.length*100):0;
+
+
+
+  // Certificeringsgereedheid
+  var readyColor=major>0?'var(--red)':minor>0?'var(--amber)':open>0?'var(--amber)':'var(--green)';
+  var readyLabel=major>0?'Niet certificeringsgereed ('+major+' major NC)':minor>0?'Aandacht vereist ('+minor+' minor NC)':open>0?'Incompleet ('+open+' open)':'Certificeringsgereed';
+
+  var h='<div class="det-hdr"><div class="det-avatar">'+ini(c.name)+'</div><div style="flex:1"><div class="det-name">'+c.name+'</div><div class="det-sub">'+(c.contact?c.contact+' &middot; ':'')+( c.phase||'')+'</div></div>'+
+    '<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:var(--radius-sm);background:var(--white);border:1px solid var(--border);font-size:12px;font-weight:600;color:'+readyColor+'">&#11044; '+readyLabel+'</div></div>';
+  h+=renderScopeCard(c);
+
+  // Auditplan kaart
+  var ap2=c.auditPlan||{};
+  var ipeople=ap2.interviewees_list||[];
+  h+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:1.25rem;box-shadow:var(--sh)">';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">Auditplan</div></div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
+  h+='<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Auditdatum</div><input type="date" value="'+(ap2.date||'')+'" onchange="saveAuditPlan(\'date\',this.value)" style="width:100%;font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-family:DM Sans,sans-serif" /></div>';
+  h+='<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Auditor</div><input type="text" value="'+(ap2.auditor||'')+'" onchange="saveAuditPlan(\'auditor\',this.value)" placeholder="Naam auditor" style="width:100%;font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-family:DM Sans,sans-serif" /></div>';
+  h+='</div>';
+  // Interviewees dynamic list
+  h+='<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Geïnterviewden</div>';
+  if(ipeople.length){
+    h+='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">';
+    ipeople.forEach(function(p,pi){
+      h+='<div style="display:flex;gap:8px;align-items:center">';
+      h+='<input type="text" value="'+( p.name||'').replace(/"/g,'&quot;')+'" onchange="saveInterviewee('+pi+',\'name\',this.value)" placeholder="Naam" style="flex:1;font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-family:DM Sans,sans-serif" />';
+      h+='<input type="text" value="'+(p.role||'').replace(/"/g,'&quot;')+'" onchange="saveInterviewee('+pi+',\'role\',this.value)" placeholder="Functie" style="flex:1;font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-family:DM Sans,sans-serif" />';
+      h+='<button onclick="removeInterviewee('+pi+')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:14px;padding:2px 6px;border-radius:4px;line-height:1" title="Verwijderen">&#x2715;</button>';
+      h+='</div>';
+    });
+    h+='</div>';
+  }
+  h+='<button onclick="addInterviewee()" class="btn btn-sm" style="font-size:12px">+ Persoon toevoegen</button>';
+  h+='</div>';
+  h+='</div>';
+
+  h+='<div class="prog-hdr"><div class="prog-pct">'+p+'%</div><div class="prog-trk"><div class="prog-lbl">Audit voortgang &mdash; '+conf+' van '+ap.length+' applicable controls conform</div><div class="prog-bar"><div class="prog-fill" style="width:'+p+'%"></div></div></div></div>';
+  h+='<div class="stats-row"><div class="stat-card"><div class="stat-val" style="color:#0F6E56">'+conf+'</div><div class="stat-lbl">Conform</div></div><div class="stat-card"><div class="stat-val" style="color:var(--amber)">'+minor+'</div><div class="stat-lbl">Minor finding</div></div><div class="stat-card"><div class="stat-val" style="color:var(--red)">'+major+'</div><div class="stat-lbl">Major finding</div></div><div class="stat-card"><div class="stat-val" style="color:#5F5E5A">'+open+'</div><div class="stat-lbl">Open</div></div></div>';
+  h+='<div class="tabs"><button class="tab'+(ST.auditTab==='clausules'?' active':'')+'" onclick="setAuditTab(\'clausules\')">Clausules ('+c.clauses.length+')</button><button class="tab'+(ST.auditTab==='annexa'?' active':'')+'" onclick="setAuditTab(\'annexa\')">Annex A ('+ap.length+' applicable)</button><button class="tab'+(ST.auditTab==='notes'?' active':'')+'" onclick="setAuditTab(\'notes\')">Notities</button></div>';
+
+  if(ST.auditTab==='clausules')h+=renderAuditClausules(c);
+  else if(ST.auditTab==='annexa')h+=renderAuditAnnexA(c);
+  else h+=renderNotesTab();
+  return h;
+}
+
+function renderAuditClausules(c){
+  var groups=[{label:'Clause 4 \u2014 Context',from:'4.',to:'5.'},{label:'Clause 5 \u2014 Leadership',from:'5.',to:'6.'},{label:'Clause 6 \u2014 Planning',from:'6.',to:'7.'},{label:'Clause 7 \u2014 Support',from:'7.',to:'8.'},{label:'Clause 8 \u2014 Operation',from:'8.',to:'9.'},{label:'Clause 9 \u2014 Performance evaluation',from:'9.',to:'10.'},{label:'Clause 10 \u2014 Improvement',from:'10.',to:'99.'}];
+  var h='';
+  groups.forEach(function(g){
+    var rows=c.clauses.filter(function(cl){return parseFloat(cl.id)>=parseFloat(g.from)&&parseFloat(cl.id)<parseFloat(g.to);});
+    if(!rows.length)return;
+    var conf=rows.filter(function(r){return r.status==='compliant';}).length;
+    var pct=Math.round(conf/rows.length*100);
+    h+='<div class="audit-grp-hdr">'+g.label+'<span class="grp-pct">'+conf+'/'+rows.length+' conform &middot; '+pct+'%</span></div>';
+    h+='<div class="tbl-wrap" style="margin-bottom:16px"><table style="table-layout:fixed"><colgroup><col style="width:65px"><col style="width:25%"><col style="width:40%"><col style="width:95px"><col style="width:38px"></colgroup><thead><tr><th>Clause</th><th>Requirement</th><th>Bewijs document</th><th>Status</th><th></th></tr></thead><tbody>';
+    rows.forEach(function(cl,li){
+      var ri=c.clauses.indexOf(cl);
+      var bc=cl.status==='compliant'?'b-compliant':cl.status==='ofi'?'b-ofi':cl.status==='minor'?'b-minor':cl.status==='major'?'b-major':cl.status==='gap'?'b-gap':'b-open';
+      var bl=cl.status==='compliant'?'Compliant':cl.status==='ofi'?'OFI':cl.status==='minor'?'Minor NC':cl.status==='major'?'Major NC':cl.status==='gap'?'GAP':'Open';
+      var docCell=cl.docLink?'<a class="doc-link" href="'+cl.docLink+'" target="_blank">'+(cl.docName||cl.doc)+' &#8599;</a>':(cl.docName||'<span style="color:var(--text-muted)">'+cl.doc+'</span>');
+      var cdesc=CLAUSE_DESC[cl.id]||{};
+      h+='<tr style="cursor:pointer" onclick="showControlDesc(\'clause\',\''+cl.id+'\',\''+encodeURIComponent(cdesc.req||cl.name)+'\',\''+encodeURIComponent(cdesc.q||'')+'\',\''+encodeURIComponent(cdesc.doc||cl.doc||'')+'\',\''+encodeURIComponent(cl.name||'')+'\')"><td><span class="mono">'+cl.id+'</span></td><td style="font-weight:500;font-size:12px">'+cl.name+'</td><td style="font-size:12px">'+docCell+'</td><td><span class="badge '+bc+'">'+bl+'</span></td><td><button class="btn btn-sm btn-edit" onclick="event.stopPropagation();openModal(\'editAuditItem\',{type:\'clause\',idx:'+ri+'})">&#9998;</button></td></tr>';
+    });
+    h+='</tbody></table></div>';
+  });
+  return h;
+}
+
+function renderAuditAnnexA(c){
+  var groups=['A.5','A.6','A.7','A.8'];
+  var labels={'A.5':'A.5 \u2014 Organisational controls (37)','A.6':'A.6 \u2014 People controls (8)','A.7':'A.7 \u2014 Physical controls (14)','A.8':'A.8 \u2014 Technological controls (34)'};
+  var tabH='<div style="display:flex;gap:4px;margin-bottom:1.25rem;flex-wrap:wrap">';
+  groups.forEach(function(g){
+    var tc={'A.5':'tag-a5','A.6':'tag-a6','A.7':'tag-a7','A.8':'tag-a8'}[g]||'tag';
+    tabH+='<button onclick="ST.auditGrp=\''+g+'\';renderAuditGrp()" class="btn btn-sm '+(ST.auditGrp===g?'btn-primary':'')+'" style="font-size:12px">'+g+'</button>';
+  });
+  tabH+='</div><div id="audit-grp-content">'+buildAuditAnnexGrp(c)+'</div>';
+  return tabH;
+}
+
+function buildAuditAnnexGrp(c){
+  var rows=c.annexA.filter(function(x){return x.group===ST.auditGrp;});
+  var ap=rows.filter(function(x){return x.applicable;});
+  var conf=ap.filter(function(x){return x.status==='compliant';}).length;
+  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:13px;color:var(--text-muted)">'+ap.length+' applicable &middot; '+conf+' conform</div><button class="btn btn-sm" onclick="toggleAllApplicable()">Alles aan/uit</button></div>';
+  h+='<div class="tbl-wrap"><table style="table-layout:fixed"><colgroup><col style="width:58px"><col style="width:24%"><col style="width:58px"><col style="width:38%"><col style="width:95px"><col style="width:38px"></colgroup><thead><tr><th>ID</th><th>Control</th><th>Appl.</th><th>Bewijs document</th><th>Status</th><th></th></tr></thead><tbody>';
+  rows.forEach(function(ctrl){
+    var ri=c.annexA.indexOf(ctrl);
+    var bc=!ctrl.applicable?'b-na':ctrl.status==='compliant'?'b-compliant':ctrl.status==='ofi'?'b-ofi':ctrl.status==='minor'?'b-minor':ctrl.status==='major'?'b-major':'b-open';
+    var bl=!ctrl.applicable?'N/A':ctrl.status==='compliant'?'Compliant':ctrl.status==='ofi'?'OFI':ctrl.status==='minor'?'Minor NC':ctrl.status==='major'?'Major NC':'Open';
+    var docCell=ctrl.docLink?'<a class="doc-link" href="'+ctrl.docLink+'" target="_blank">'+(ctrl.docName||ctrl.doc)+' &#8599;</a>':(ctrl.docName||'<span style="color:var(--text-muted);font-size:11px">'+ctrl.doc+'</span>');
+    var adesc=aDesc(ctrl.id);
+    h+='<tr'+(ctrl.applicable?' style="cursor:pointer" onclick="showControlDesc(\'annex\',\''+ctrl.id+'\',\''+encodeURIComponent(adesc.desc||ctrl.name)+'\',\'\',\''+encodeURIComponent(adesc.doc||ctrl.doc||'')+'\',\''+encodeURIComponent(ctrl.name||'')+'\')"':' class="na-row"')+'>';
+    h+='<td><span class="mono">'+ctrl.id+'</span></td>';
+    h+='<td style="font-size:12px;font-weight:500">'+ctrl.name+'</td>';
+    h+='<td><label class="soa-toggle" onclick="event.stopPropagation();toggleApplicable('+ri+')"><div class="toggle-box'+(ctrl.applicable?' on':'')+'"><div class="toggle-dot"></div></div></label></td>';
+    h+='<td style="font-size:12px">'+docCell+'</td>';
+    h+='<td>'+(ctrl.applicable?'<span class="badge '+bc+'">'+bl+'</span>':'')+'</td>';
+    h+='<td>'+(ctrl.applicable?'<button class="btn btn-sm btn-edit" onclick="event.stopPropagation();openModal(\'editAuditItem\',{type:\'annex\',idx:'+ri+'})">&#9998;</button>':'')+'</td>';
+    h+='</tr>';
+  });
+  return h+'</tbody></table></div>';
+}
+
+function renderAuditGrp(){
+  var c=clients()[ST.sel];
+  var el=document.getElementById('audit-grp-content');
+  if(el)el.innerHTML=buildAuditAnnexGrp(c);
+  // update group buttons
+  var btns=document.querySelectorAll('[onclick^="ST.auditGrp"]');
+  btns.forEach(function(b){
+    var g=b.getAttribute('onclick').match(/\'([^\']+)\'/)[1];
+    b.className='btn btn-sm'+(ST.auditGrp===g?' btn-primary':'');
+  });
+}
+
+function toggleApplicable(ri){
+  var c=clients()[ST.sel];
+  c.annexA[ri].applicable=!c.annexA[ri].applicable;
+  if(!c.annexA[ri].applicable)c.annexA[ri].status='';
+  saveDB();renderAuditGrp();
+}
+
+function toggleAllApplicable(){
+  var c=clients()[ST.sel];
+  var rows=c.annexA.filter(function(x){return x.group===ST.auditGrp;});
+  var allOn=rows.every(function(x){return x.applicable;});
+  rows.forEach(function(x){x.applicable=!allOn;if(allOn)x.status='';});
+  saveDB();renderAuditGrp();
+}
+
+// ═══════════════════════════════════════════
+// LIVE SEARCH
+// ═══════════════════════════════════════════
+function attachSearchEvents(){
+  var sb=document.getElementById('search-box');
+  var fs=document.getElementById('filter-status');
+  var fc=document.getElementById('filter-cat');
+  if(sb)sb.addEventListener('input',function(){ST.search=this.value;updateTable();});
+  if(fs)fs.addEventListener('change',function(){ST.fSt=this.value;updateTable();});
+  if(fc)fc.addEventListener('change',function(){ST.fCat=this.value;updateTable();});
+}
+
+function updateTable(){
+  var c=clients()[ST.sel];if(!c)return;
+  var docs=c.docs||[];var fd=filtered(docs);
+  var rc=document.getElementById('res-cnt');if(rc)rc.textContent=fd.length+' van '+docs.length;
+  var tbody=document.getElementById('doc-tbody');if(tbody)tbody.innerHTML=buildDocRows(fd,docs);
+}
+
+// ═══════════════════════════════════════════
+// MODAL
+// ═══════════════════════════════════════════
+function renderModal(){
+  var root=document.getElementById('modal-root');
+  if(!ST.modal){root.innerHTML='';return;}
+
+  if(ST.modal==='addClient'){
+    root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:520px"><div class="modal-title">Klant toevoegen</div>'+
+      '<div class="field"><label>Bedrijfsnaam *</label><input id="m-n" placeholder="Bijv. Acme B.V." autofocus /></div>'+
+      '<div class="field"><label>Contactpersoon</label><input id="m-c" placeholder="Naam contactpersoon" /></div>'+
+      '<div class="field-row"><div class="field"><label>Sector</label><select id="m-sector"><option value="">— Selecteer</option><option>Financiële dienstverlening</option><option>Zorg</option><option>Overheid</option><option>IT / Software</option><option>Industrie / Productie</option><option>Handel / Retail</option><option>Logistiek</option><option>Onderwijs</option><option>Overig</option></select></div><div class="field"><label>Medewerkers</label><select id="m-size"><option value="">— Selecteer</option><option>&lt;25</option><option>25–100</option><option>100–500</option><option>&gt;500</option></select></div></div>'+
+      '<div class="field"><label>Beoogde certificeringsdatum</label><input type="date" id="m-certdate" /></div>'+
+      '<div class="field"><label>Startfase</label><select id="m-p">'+PHASES.map(function(p){return'<option>'+p+'</option>';}).join('')+'</select></div>'+
+      '<div class="modal-actions"><button class="btn" onclick="closeModal()">Annuleer</button><button class="btn btn-primary" onclick="addClient()">Toevoegen</button></div></div></div>';
+
+  } else if(ST.modal==='addDoc'){
+    var ei=ST.mdata;var d=(ei!==null&&ei!==undefined)?(clients()[ST.sel].docs[ei]||{}):{};var isE=ei!==null&&ei!==undefined;
+    var ctrlOpts=CONTROLS.map(function(cv){return'<option value="'+cv+'"'+(d.control===cv?' selected':'')+'>'+( cv||'\u2014 Geen')+'</option>';}).join('');
+    var phOpts='<option value=""'+(!d.phase?' selected':'')+'>— Geen</option>'+PHASES.map(function(p){return'<option'+(d.phase===p?' selected':'')+'>'+p+'</option>';}).join('');
+    var catOpts=CATS.map(function(ct){return'<option'+(d.category===ct?' selected':'')+'>'+ct+'</option>';}).join('');
+    var stOpts=['concept','review','approved'].map(function(s){var l=s==='approved'?'Goedgekeurd':s==='review'?'In review':'Concept';return'<option value="'+s+'"'+(d.status===s?' selected':'')+'>'+l+'</option>';}).join('');
+    root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-title">'+(isE?'Document bewerken':'Document toevoegen')+'</div><div class="field"><label>Documentnaam *</label><input id="m-dn" value="'+(d.name||'').replace(/"/g,'&quot;')+'" placeholder="Bijv. Information Security Policy" autofocus /></div><div class="field"><label>Link (optioneel)</label><input id="m-dl" value="'+(d.link||'').replace(/"/g,'&quot;')+'" placeholder="https://sharepoint.com/..." /></div><div class="field-row"><div class="field"><label>Categorie</label><select id="m-dc">'+catOpts+'</select></div><div class="field"><label>Status</label><select id="m-ds">'+stOpts+'</select></div></div><div class="field"><label>ISO 27001 control</label><select id="m-dco">'+ctrlOpts+'</select></div><div class="field-row"><div class="field"><label>Fase</label><select id="m-dp">'+phOpts+'</select></div><div class="field"><label>Datum</label><input type="date" id="m-dd" value="'+(d.date||today())+'" /></div></div><div class="modal-actions"><button class="btn" onclick="closeModal()">Annuleer</button><button class="btn btn-primary" onclick="saveDoc('+(isE?ei:'null')+')">'+( isE?'&#10003; Opslaan':'Toevoegen')+'</button></div></div></div>';
+
+  } else if(ST.modal==='notifications'){
+    var notifs=getMyNotifications();
+    var myName=AUTH.user?AUTH.user.name:'';
+    var mh='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:600px"><div class="modal-title">&#128276; Mijn notificaties</div>';
+    if(!notifs.length){
+      mh+='<div style="text-align:center;padding:32px 0;color:var(--text-muted)"><div style="font-size:32px;margin-bottom:12px">✓</div><div style="font-size:14px;font-weight:600">Geen openstaande reviews</div><div style="font-size:12px;margin-top:4px">Alle documenten waarbij jij reviewer bent zijn goedgekeurd of staan nog op concept.</div></div>';
+    } else {
+      mh+='<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">'+notifs.length+' document'+(notifs.length!==1?'en':'')+' wacht'+(notifs.length===1?'':'en')+' op jouw review als <strong>'+myName+'</strong>.</div>';
+      notifs.forEach(function(x){
+        var doc=x.doc;
+        var isPreparer=(AUTH.user&&(AUTH.user.localAccountId===doc.preparerId||AUTH.user.name===doc.preparerName));
+        var approveBtn=isPreparer
+          ?'<button class="btn btn-sm" style="opacity:.45;cursor:not-allowed" title="Je bent preparer van dit document">&#10003; Goedkeuren</button>'
+          :'<button class="btn btn-sm" style="background:#E1F5EE;color:#0F6E56;border-color:#86efac;font-weight:600" onclick="notifApprove('+x.clientIdx+','+x.di+','+x.doci+')">&#10003; Goedkeuren</button>';
+        mh+='<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:8px">'
+          +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:13px;font-weight:600;color:var(--text)">'+esc(doc.name)+'</div>'
+          +'<div style="display:flex;gap:8px;margin-top:3px;flex-wrap:wrap">'
+          +'<span style="font-size:11px;background:#EBF2FF;color:var(--blue);border-radius:4px;padding:1px 7px;font-weight:600">'+esc(x.clientName)+'</span>'
+          +'<span style="font-size:11px;color:var(--text-muted)">'+esc(x.domName)+'</span>'
+          +(doc.reviewedAt?'<span style="font-size:11px;color:var(--amber)">&#128197; '+fmtDate(doc.reviewedAt)+'</span>':'')
+          +(doc.preparerName?'<span style="font-size:11px;color:var(--text-muted)">&#9998; '+esc(doc.preparerName)+'</span>':'')
+          +'</div></div>'
+          +(doc.link?'<a href="'+esc(doc.link)+'" target="_blank" class="btn btn-sm" style="font-size:11px">&#128196;</a>':'')
+          +approveBtn
+          +'</div>';
+      });
+    }
+    mh+='<div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">Sluiten</button></div></div></div>';
+    root.innerHTML=mh;
 
   } else if(ST.modal==='addRisk'){
     var rei=ST.mdata;var isER=(rei!==null&&rei!==undefined);
