@@ -1620,7 +1620,7 @@ function renderDomainsTab(c){
           var roleHtml='';
           if(doc.preparerName){roleHtml+='<span style="font-size:10px;color:var(--text-muted);white-space:nowrap">&#9998; '+(doc.preparerName.split(' ')[0])+'</span>';}
           if(doc.reviewerName){if(roleHtml)roleHtml+=' ';roleHtml+='<span style="font-size:10px;color:var(--text-muted);white-space:nowrap">&#128065; '+(doc.reviewerName.split(' ')[0])+'</span>';}
-          if(doc.reviewedAt&&doc.status==='review'){if(roleHtml)roleHtml+=' ';roleHtml+='<span style="font-size:10px;color:var(--amber);white-space:nowrap">&#128197; doorgestuurd '+doc.reviewedAt+'</span>';}
+          if(doc.reviewedAt){if(roleHtml)roleHtml+=' ';roleHtml+='<span style="font-size:10px;color:var(--amber);white-space:nowrap">&#128197; doorgestuurd '+doc.reviewedAt+'</span>';}
           if(doc.approvedBy){if(roleHtml)roleHtml+=' ';roleHtml+='<span style="font-size:10px;color:#0F6E56;font-weight:600;white-space:nowrap">&#10003; '+(doc.approvedBy.split(' ')[0])+(doc.approvedAt?' '+doc.approvedAt:'')+'</span>';}
           h+='<td><span class="badge '+bc+'">'+bl+'</span>'+(roleHtml?'<div style="margin-top:2px">'+roleHtml+'</div>':'')+'</td>';
           h+='<td style="font-size:11px;color:var(--text-muted)">'+(doc.date||'—')+'</td>';
