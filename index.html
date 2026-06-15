@@ -669,7 +669,12 @@ function spEnsureItem(){
           body:JSON.stringify({fields:{ToolkitData:'{"impl":[],"audit":[],"gap":[]}'}}
         )}).then(function(r){return r.json();});
       }).then(function(item){
-        if(item.id){SP_SYNC.itemId=item.id;return item.id;}
+        if(item.id){
+          SP_SYNC.itemId=item.id;
+          // Sla versie meteen op zodat de eerste saveDB geen false conflict geeft
+          if(item.lastModifiedDateTime)SP_SYNC.lastVersion=item.lastModifiedDateTime;
+          return item.id;
+        }
         throw new Error('Cannot create item: '+(item.error&&item.error.message||JSON.stringify(item)));
       });
     });
@@ -804,7 +809,8 @@ function saveDB(){
     spGetRemoteVersion().then(function(remoteTs){
       // Alleen een echte conflictmelding tonen als het tijdsverschil meer dan 30 seconden is.
       // Kleinere verschillen zijn poll-ruis (de achtergrondpoll werkt elk 10 seconden).
-      if(remoteTs&&SP_SYNC.lastVersion&&remoteTs!==SP_SYNC.lastVersion){
+      // Geen conflictcheck als lastVersion leeg is — eerste save na laden of nieuwe klant
+      if(remoteTs&&SP_SYNC.lastVersion&&SP_SYNC.lastVersion!==''&&remoteTs!==SP_SYNC.lastVersion){
         var diffSec=Math.abs(new Date(remoteTs).getTime()-new Date(SP_SYNC.lastVersion).getTime())/1000;
         if(diffSec>30){
           var keepMine=confirm('\u26A0 Conflict: een collega heeft intussen wijzigingen opgeslagen.\n\nOK \u2014 jouw versie opslaan (de recente wijzigingen van je collega worden overschreven)\nAnnuleren \u2014 versie van je collega laden (jouw laatste wijziging gaat verloren)');
