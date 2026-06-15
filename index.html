@@ -1501,7 +1501,8 @@ function renderDomainsTab(c){
         :'<button class="btn btn-sm" style="background:#E1F5EE;color:#0F6E56;border-color:#86efac;font-weight:600" onclick="cycleDomainDocStatus('+di+','+doci+')" title="Goedkeuren">&#10003; Goedkeuren</button>';
       var docLink=doc.link?'<a href="'+esc(doc.link)+'" target="_blank" style="font-size:11px;color:var(--blue);margin-left:6px">&#128196; openen</a>':'';
       var prepLabel=doc.preparerName?'<span style="font-size:10px;color:var(--text-muted)">&#9998; '+esc(doc.preparerName)+'</span>':'';
-      var revLabel=doc.reviewerName?'<span style="font-size:10px;color:#1a6bbd">&#10003; '+esc(doc.reviewerName)+'</span>':'';
+      var revLabel=doc.reviewerName?'<span style="font-size:10px;color:#1a6bbd">&#128065; '+esc(doc.reviewerName)+'</span>':'';
+      var reviewedLabel=doc.reviewedAt?'<span style="font-size:10px;color:var(--amber)">&#128197; doorgestuurd '+doc.reviewedAt+(doc.reviewedBy?' door '+esc(doc.reviewedBy.split(' ')[0]):'')+'</span>':'';
       return'<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:white;border:1px solid #BFDBFE;border-radius:7px;margin-bottom:5px">'
         +'<div style="flex:1;min-width:0">'
         +'<div style="font-size:13px;font-weight:600;color:var(--text)">'+esc(doc.name)+docLink+'</div>'
@@ -1509,6 +1510,7 @@ function renderDomainsTab(c){
         +'<span style="font-size:10px;color:var(--text-muted);background:#F0F4F8;border-radius:4px;padding:1px 6px">'+esc(x.domName)+'</span>'
         +(prepLabel?prepLabel:'')
         +(revLabel?revLabel:'')
+        +(reviewedLabel?reviewedLabel:'')
         +'</div>'
         +'</div>'
         +approveBtn
@@ -1618,6 +1620,7 @@ function renderDomainsTab(c){
           var roleHtml='';
           if(doc.preparerName){roleHtml+='<span style="font-size:10px;color:var(--text-muted);white-space:nowrap">&#9998; '+(doc.preparerName.split(' ')[0])+'</span>';}
           if(doc.reviewerName){if(roleHtml)roleHtml+=' ';roleHtml+='<span style="font-size:10px;color:var(--text-muted);white-space:nowrap">&#128065; '+(doc.reviewerName.split(' ')[0])+'</span>';}
+          if(doc.reviewedAt&&doc.status==='review'){if(roleHtml)roleHtml+=' ';roleHtml+='<span style="font-size:10px;color:var(--amber);white-space:nowrap">&#128197; doorgestuurd '+doc.reviewedAt+'</span>';}
           if(doc.approvedBy){if(roleHtml)roleHtml+=' ';roleHtml+='<span style="font-size:10px;color:#0F6E56;font-weight:600;white-space:nowrap">&#10003; '+(doc.approvedBy.split(' ')[0])+(doc.approvedAt?' '+doc.approvedAt:'')+'</span>';}
           h+='<td><span class="badge '+bc+'">'+bl+'</span>'+(roleHtml?'<div style="margin-top:2px">'+roleHtml+'</div>':'')+'</td>';
           h+='<td style="font-size:11px;color:var(--text-muted)">'+(doc.date||'—')+'</td>';
@@ -1662,17 +1665,20 @@ function delDomain(di){
 function cycleDomainDocStatus(di,doci){
   var c=clients()[ST.sel];if(!c)return;
   var doc=c.domains[di].docs[doci];
+  if(!doc)return;
   var cycle=['concept','review','approved'];
   var cur=cycle.indexOf(doc.status||'concept');
   var next=cycle[(cur+1)%cycle.length];
 
+  // Haal gebruikersinfo eenmalig op buiten alle if-blokken (voorkomt var-shadowing)
+  var _myId=AUTH.user?AUTH.user.localAccountId:'';
+  var _myName=AUTH.user?AUTH.user.name:'';
+
   // ── Blokkeer goedkeuring door de preparer van dit document ────────
   if(next==='approved'){
-    var myId=AUTH.user?AUTH.user.localAccountId:'';
-    var myName=AUTH.user?AUTH.user.name:'';
-    var isPreparer=(myId&&doc.preparerId&&myId===doc.preparerId)||(myName&&doc.preparerName&&myName===doc.preparerName);
-    if(isPreparer){
-      alert('\u26D4 Je kunt dit document niet goedkeuren omdat je als preparer bent aangewezen.\nLaat de reviewer "'+( doc.reviewerName||'reviewer')+'" het document goedkeuren.');
+    var _isPreparer=(_myId&&doc.preparerId&&_myId===doc.preparerId)||(_myName&&doc.preparerName&&_myName===doc.preparerName);
+    if(_isPreparer){
+      alert('\u26D4 Je kunt dit document niet goedkeuren omdat je als preparer bent aangewezen.\nLaat de reviewer "'+(doc.reviewerName||'reviewer')+'" het document goedkeuren.');
       return;
     }
   }
@@ -1682,20 +1688,29 @@ function cycleDomainDocStatus(di,doci){
     if(!confirm('"'+doc.name+'" staat op Goedgekeurd. Weet je zeker dat je de status wilt resetten naar Concept?\n\nDe goedkeuring van '+(doc.approvedBy||'onbekend')+' wordt gewist.'))return;
   }
 
+  // ── Doorsturen naar review: sla datum op ─────────────────────────
   if(next==='review'){
     if(!confirm('"'+doc.name+'" instellen op In review?'))return;
+    doc.reviewedAt=today(); // datum doorgestuurd naar review
+    doc.reviewedBy=_myName; // wie heeft doorgestuurd
   }
+
+  // ── Goedkeuren ───────────────────────────────────────────────────
   if(next==='approved'){
-    var approverName=AUTH.user?AUTH.user.name:'onbekend';
-    if(!confirm('"'+doc.name+'" goedkeuren? Dit wordt vastgelegd als goedgekeurd door '+approverName+'.'))return;
-    doc.approvedBy=approverName;
-    doc.approvedById=AUTH.user?AUTH.user.localAccountId:'';
+    if(!confirm('"'+doc.name+'" goedkeuren? Dit wordt vastgelegd als goedgekeurd door '+_myName+'.'))return;
+    doc.approvedBy=_myName;
+    doc.approvedById=_myId;
     doc.approvedAt=today();
   }
+
+  // ── Terugzetten: wis beide datums ────────────────────────────────
   if(next!=='approved'){
-    // Status gaat terug, wis goedkeuring
     doc.approvedBy='';doc.approvedById='';doc.approvedAt='';
   }
+  if(next==='concept'){
+    doc.reviewedAt='';doc.reviewedBy='';
+  }
+
   doc.status=next;
   doc.date=today();
   saveDB();render();
