@@ -3025,7 +3025,15 @@ function renderModal(){
   // Async: replace text inputs with dropdowns if users available
   fetchOrgUsers().then(function(users){
     var sec=document.getElementById('dd-role-section');
-    if(!sec||!users||!users.length)return;
+    if(!sec)return;
+    if(!users||!users.length){
+      // Zichtbare foutmelding zodat "Laden..." niet stil blijft hangen
+      sec.innerHTML=
+        '<div class="field"><label>Preparer</label><input id="dd-preparer" value="'+(_existingDoc.preparerName||'').replace(/"/g,'&quot;')+'" placeholder="Naam..." /></div>'+
+        '<div class="field"><label>Reviewer</label><input id="dd-reviewer" value="'+(_existingDoc.reviewerName||'').replace(/"/g,'&quot;')+'" placeholder="Naam..." /></div>'+
+        '<div style="font-size:11px;color:#D97706;margin-top:4px">&#9888; Gebruikerslijst kon niet worden geladen &mdash; controleer of <code>GroupMember.Read.All</code> admin consent heeft in Entra ID, en of de groep-ID correct is.</div>';
+      return;
+    }
     var prepVal=_existingDoc.preparerId||_existingDoc.preparerName||'';
     var revVal=_existingDoc.reviewerId||_existingDoc.reviewerName||'';
     var prepOpts=users.map(function(u){return'<option value="'+u.id+'"'+(prepVal===u.id?' selected':'')+'>'+u.name+'</option>';}).join('');
@@ -3231,7 +3239,7 @@ function fetchOrgUsers(){
   if(SP_USERS_CACHE && (Date.now()-SP_USERS_CACHE.ts < 5*60*1000)){
     return Promise.resolve(SP_USERS_CACHE.users);
   }
-  return msalInstance.acquireTokenSilent({scopes:['User.Read.All'],account:AUTH.user}).then(function(r){return r.accessToken;}).catch(function(){return acquireToken();}).then(function(token){
+  return msalInstance.acquireTokenSilent({scopes:['User.Read.All','GroupMember.Read.All'],account:AUTH.user}).then(function(r){return r.accessToken;}).catch(function(){return acquireToken();}).then(function(token){
     // Groep-ID ingesteld: haal alleen leden van die groep op.
     // Geen ID: haal alle actieve gebruikers op (tijdelijke fallback).
     var url = RISGUARD_GROUP_ID
