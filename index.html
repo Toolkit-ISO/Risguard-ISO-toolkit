@@ -2923,20 +2923,38 @@ function exportStatusReport(){
   var domainRows='';
   (c.domains||[]).forEach(function(dom){
     var docs=dom.docs||[];
+    var aprD=docs.filter(function(d){return d.status==='approved';}).length;
+    var revD=docs.filter(function(d){return d.status==='review';}).length;
+    var conD=docs.filter(function(d){return !d.status||d.status==='concept';}).length;
+    var pctD=docs.length?Math.round(aprD/docs.length*100):0;
+    domainRows+='<tr><td colspan="6" style="padding:0">'
+      +'<div style="background:linear-gradient(90deg,#0E2841 0%,#1F55A6 100%);padding:9px 14px;display:flex;align-items:center;justify-content:space-between">'
+      +'<div style="font-size:12px;font-weight:700;color:#fff">&#128193; '+dom.name+'</div>'
+      +'<div style="display:flex;align-items:center;gap:10px">'
+      +(docs.length?'<span style="font-size:10px;color:rgba(255,255,255,.7)">'+docs.length+' doc'+(docs.length!==1?'s':'')+'</span>':'')
+      +(docs.length?'<span style="font-size:10px;color:#86efac">'+aprD+' &#10003;</span><span style="font-size:10px;color:#fdba74;margin-left:4px">'+revD+' review</span><span style="font-size:10px;color:rgba(255,255,255,.5);margin-left:4px">'+conD+' concept</span>':'')
+      +(docs.length?'<div style="width:56px;height:4px;background:rgba(255,255,255,.2);border-radius:2px;margin-left:4px"><div style="height:4px;background:#86efac;border-radius:2px;width:'+pctD+'%"></div></div>':'')
+      +'</div></div></td></tr>';
     if(!docs.length){
-      domainRows+='<tr><td colspan="6" style="padding:8px 12px;color:#94A3B8;font-style:italic;font-size:12px;border-bottom:1px solid #E2E8F0">'+dom.name+' — geen documenten</td></tr>';
+      domainRows+='<tr><td colspan="6" style="padding:7px 14px 9px;color:#94A3B8;font-style:italic;font-size:12px;border-bottom:1px solid #E2E8F0">Geen documenten in dit domein.</td></tr>'
+        +'<tr><td colspan="6" style="height:6px;background:#EEF2F7;border-bottom:2px solid #D1DCE8"></td></tr>';
       return;
     }
     docs.forEach(function(d,i){
       domainRows+='<tr style="background:'+(i%2===0?'#fff':'#F8FAFC')+'">'
-        +'<td style="padding:8px 12px;font-size:12px;font-weight:500;border-bottom:1px solid #E2E8F0;border-left:3px solid #1F55A6;color:#0E2841">'+(i===0?'<span style="font-weight:700">'+dom.name+'</span><br>':'')+'<span style="font-weight:500">'+d.name+'</span></td>'
-        +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'+(d.category||'—')+'</td>'
-        +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0;font-family:monospace">'+(d.controls&&d.controls.length?d.controls.join(', '):(d.control||'—'))+'</td>'
+        +'<td style="padding:8px 14px;font-size:12px;font-weight:500;border-bottom:1px solid #E2E8F0;color:#0E2841">'+d.name+'</td>'
+        +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'+(d.category||'&mdash;')+'</td>'
+        +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0;font-family:monospace">'+(d.controls&&d.controls.length?d.controls.join(', '):(d.control||'&mdash;'))+'</td>'
         +'<td style="padding:8px 12px;border-bottom:1px solid #E2E8F0">'+badge(d.status)+'</td>'
-        +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'+(d.preparerName?'<span style="color:#64748B">✎ '+d.preparerName+'</span>':'—')+'<br>'+(d.reviewerName?'<span style="color:#1F55A6">👁 '+d.reviewerName+'</span>':'')+(d.approvedBy?'<br><span style="color:#0F6E56;font-weight:600">✓ '+d.approvedBy+'</span>':'')+'</td>'
+        +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'
+          +(d.preparerName?'&#9998; '+d.preparerName:'')
+          +(d.reviewerName?'<br><span style="color:#1F55A6">&#128065; '+d.reviewerName+'</span>':'')
+          +(d.approvedBy?'<br><span style="color:#0F6E56;font-weight:600">&#10003; '+d.approvedBy+'</span>':(!d.preparerName?'&mdash;':''))
+          +'</td>'
         +'<td style="padding:8px 12px;font-size:11px;color:#94A3B8;border-bottom:1px solid #E2E8F0">'+(d.approvedAt?fmtDate(d.approvedAt):d.reviewedAt?'Review: '+fmtDate(d.reviewedAt):fmtDate(d.date))+'</td>'
         +'</tr>';
     });
+    domainRows+='<tr><td colspan="6" style="height:8px;background:#EEF2F7;border-bottom:2px solid #D1DCE8"></td></tr>';
   });
 
   var riskRows='';
