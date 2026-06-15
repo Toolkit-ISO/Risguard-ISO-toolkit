@@ -830,6 +830,8 @@ function clients(){return DB[ST.module]||[];}
 
 function ini(n){return n.split(' ').filter(Boolean).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2)||'?';}
 function today(){return new Date().toISOString().slice(0,10);}
+// Zet ISO-datum (2026-06-15) om naar NL-weergave (15-06-2026). Opslag blijft altijd ISO.
+function fmtDate(s){if(!s)return'—';var p=s.split('-');if(p.length!==3)return s;return p[2]+'-'+p[1]+'-'+p[0];}
 // HTML-escape voor vrije-tekstvelden in innerHTML (XSS / kapotte rendering bij < > & ")
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
@@ -1272,7 +1274,7 @@ function renderScopeCard(c){
   var meta=[];
   if(c.sector)meta.push({lbl:'Sector',val:c.sector});
   if(c.size)meta.push({lbl:'Medewerkers',val:c.size});
-  if(c.certDate)meta.push({lbl:'Certificeringsdatum',val:c.certDate});
+  if(c.certDate)meta.push({lbl:'Certificeringsdatum',val:fmtDate(c.certDate)});
   var scopeDocs=c.scopeDocs||[];
   var h='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:1.25rem;box-shadow:var(--sh)">';
   h+='<div style="display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;margin-bottom:10px">';
@@ -1416,7 +1418,7 @@ function buildDocRows(fd,docs){
     var noteVal=(d.note||'').replace(/</g,'&lt;').replace(/"/g,'&quot;');
     var _ic=d.control||'';
     var icinfoBtn=_ic?getCtrlInfoBtn(_ic):'';
-    rows+='<tr><td>'+nm+'</td><td><span class="tag">'+( d.category||'\u2014')+'</span></td><td style="display:flex;align-items:center;gap:4px"><span class="mono">'+(d.control||'\u2014')+'</span>'+icinfoBtn+'</td><td><span class="badge '+bc+'"><span class="sdot '+dc+'"></span>'+bl+'</span></td><td><span style="font-size:11px;color:var(--text-muted)">'+(d.date||'\u2014')+'</span></td><td style="display:flex;gap:5px"><button class="btn btn-sm" onclick="cycleStatus('+i+')" title="Volgende status" style="font-size:13px">&#8635;</button><button class="btn btn-sm btn-edit" onclick="openModal(\'addDoc\','+i+')" title="Bewerken">&#9998;</button><button class="btn btn-sm btn-danger" onclick="delDoc('+i+')">&#x2715;</button></td></tr>';
+    rows+='<tr><td>'+nm+'</td><td><span class="tag">'+( d.category||'\u2014')+'</span></td><td style="display:flex;align-items:center;gap:4px"><span class="mono">'+(d.control||'\u2014')+'</span>'+icinfoBtn+'</td><td><span class="badge '+bc+'"><span class="sdot '+dc+'"></span>'+bl+'</span></td><td><span style="font-size:11px;color:var(--text-muted)">'+fmtDate(d.date)+'</span></td><td style="display:flex;gap:5px"><button class="btn btn-sm" onclick="cycleStatus('+i+')" title="Volgende status" style="font-size:13px">&#8635;</button><button class="btn btn-sm btn-edit" onclick="openModal(\'addDoc\','+i+')" title="Bewerken">&#9998;</button><button class="btn btn-sm btn-danger" onclick="delDoc('+i+')">&#x2715;</button></td></tr>';
     var hasNote=d.note&&d.note.trim()!=='';
     var noteBtn='<button onclick="toggleDocNote(\'note-'+i+'\')" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;color:var(--text-muted);">'+(hasNote?'&#128221; notitie':'+ notitie')+'</button>';
     rows=rows.replace(/<\/tr>$/,'<td>'+noteBtn+'<\/td><\/tr>');
@@ -1502,7 +1504,7 @@ function renderDomainsTab(c){
       var docLink=doc.link?'<a href="'+esc(doc.link)+'" target="_blank" style="font-size:11px;color:var(--blue);margin-left:6px">&#128196; openen</a>':'';
       var prepLabel=doc.preparerName?'<span style="font-size:10px;color:var(--text-muted)">&#9998; '+esc(doc.preparerName)+'</span>':'';
       var revLabel=doc.reviewerName?'<span style="font-size:10px;color:#1a6bbd">&#128065; '+esc(doc.reviewerName)+'</span>':'';
-      var reviewedLabel=doc.reviewedAt?'<span style="font-size:10px;color:var(--amber)">&#128197; doorgestuurd '+doc.reviewedAt+(doc.reviewedBy?' door '+esc(doc.reviewedBy.split(' ')[0]):'')+'</span>':'';
+      var reviewedLabel=doc.reviewedAt?'<span style="font-size:10px;color:var(--amber)">&#128197; doorgestuurd '+fmtDate(doc.reviewedAt)+(doc.reviewedBy?' door '+esc(doc.reviewedBy.split(' ')[0]):'')+'</span>':'';
       return'<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:white;border:1px solid #BFDBFE;border-radius:7px;margin-bottom:5px">'
         +'<div style="flex:1;min-width:0">'
         +'<div style="font-size:13px;font-weight:600;color:var(--text)">'+esc(doc.name)+docLink+'</div>'
@@ -1620,10 +1622,10 @@ function renderDomainsTab(c){
           var roleHtml='';
           if(doc.preparerName){roleHtml+='<span style="font-size:10px;color:var(--text-muted);white-space:nowrap">&#9998; '+(doc.preparerName.split(' ')[0])+'</span>';}
           if(doc.reviewerName){if(roleHtml)roleHtml+=' ';roleHtml+='<span style="font-size:10px;color:var(--text-muted);white-space:nowrap">&#128065; '+(doc.reviewerName.split(' ')[0])+'</span>';}
-          if(doc.reviewedAt){if(roleHtml)roleHtml+=' ';roleHtml+='<span style="font-size:10px;color:var(--amber);white-space:nowrap">&#128197; doorgestuurd '+doc.reviewedAt+'</span>';}
-          if(doc.approvedBy){if(roleHtml)roleHtml+=' ';roleHtml+='<span style="font-size:10px;color:#0F6E56;font-weight:600;white-space:nowrap">&#10003; '+(doc.approvedBy.split(' ')[0])+(doc.approvedAt?' '+doc.approvedAt:'')+'</span>';}
+          if(doc.reviewedAt){if(roleHtml)roleHtml+=' ';roleHtml+='<span style="font-size:10px;color:var(--amber);white-space:nowrap">&#128197; doorgestuurd '+fmtDate(doc.reviewedAt)+'</span>';}
+          if(doc.approvedBy){if(roleHtml)roleHtml+=' ';roleHtml+='<span style="font-size:10px;color:#0F6E56;font-weight:600;white-space:nowrap">&#10003; '+(doc.approvedBy.split(' ')[0])+(doc.approvedAt?' '+fmtDate(doc.approvedAt):'')+'</span>';}
           h+='<td><span class="badge '+bc+'">'+bl+'</span>'+(roleHtml?'<div style="margin-top:2px">'+roleHtml+'</div>':'')+'</td>';
-          h+='<td style="font-size:11px;color:var(--text-muted)">'+(doc.date||'—')+'</td>';
+          h+='<td style="font-size:11px;color:var(--text-muted)">'+fmtDate(doc.date)+'</td>';
           h+='<td style="display:flex;gap:3px">';
           h+='<button class="btn btn-sm" onclick="cycleDomainDocStatus('+di+','+doci+')" title="Status" style="font-size:12px">&#8635;</button>';
           h+='<button class="btn btn-sm btn-edit" onclick="openModal(\'editDomainDoc\',{di:'+di+',doci:'+doci+'})" title="Bewerken">&#9998;</button>';
@@ -2684,7 +2686,7 @@ function renderRisksTab(c){
     if((r.controls||[]).length){
       h+='<div style="margin-top:3px">'+r.controls.map(function(cv){return '<span style="display:inline-block;background:#EBF2FF;color:#1a6bbd;border-radius:4px;padding:0 5px;margin:1px 2px 1px 0;font-size:10px;white-space:nowrap">'+esc(cv)+'</span>';}).join('')+'</div>';
     }
-    if(r.reviewDate)h+='<div style="font-size:10px;color:'+(r.reviewDate<today()?'#DC2626':'var(--text-muted)')+';margin-top:2px">Review: '+r.reviewDate+(r.reviewDate<today()?' \u26A0':'')+'</div>';
+    if(r.reviewDate)h+='<div style="font-size:10px;color:'+(r.reviewDate<today()?'#DC2626':'var(--text-muted)')+';margin-top:2px">Review: '+fmtDate(r.reviewDate)+(r.reviewDate<today()?' \u26A0':'')+'</div>';
     h+='</td>';
     h+='<td style="font-size:12px">'+esc(r.owner||'\u2014')+'</td>';
     h+='<td><select style="'+selSty+'" onchange="saveRiskField('+ri+',\'likelihood\',this.value)">'+RISK_LVLS.map(function(v){return '<option value="'+v+'"'+(r.likelihood===v?' selected':'')+'>'+riskLbl(v)+'</option>';}).join('')+'</select></td>';
@@ -4048,7 +4050,7 @@ function renderGapFindings(c){
   findings.forEach(function(f,fi){
     var bc=f.status==='compliant'?'b-compliant':f.status==='ofi'?'b-ofi':f.status==='minor'?'b-minor':f.status==='major'?'b-major':'b-open';
     var bl=f.status==='compliant'?'Compliant':f.status==='ofi'?'OFI':f.status==='minor'?'Minor NC':f.status==='major'?'Major NC':'Open';
-    h+='<tr><td style="font-size:12px;font-weight:500">'+f.domain+'</td><td><span class="mono" style="font-size:11px">'+(f.control||'—')+'</span></td><td><span class="badge '+bc+'">'+bl+'</span></td><td style="font-size:12px">'+(f.description||'').replace(/</g,'&lt;')+'</td><td style="font-size:11px;color:var(--text-muted)">'+(f.date||'—')+'</td><td style="display:flex;gap:4px"><button class="btn btn-sm btn-edit" onclick="openModal(\'addFinding\','+fi+')">&#9998;</button><button class="btn btn-sm btn-danger" onclick="deleteFinding('+fi+')">&#x2715;</button></td></tr>';
+    h+='<tr><td style="font-size:12px;font-weight:500">'+f.domain+'</td><td><span class="mono" style="font-size:11px">'+(f.control||'—')+'</span></td><td><span class="badge '+bc+'">'+bl+'</span></td><td style="font-size:12px">'+(f.description||'').replace(/</g,'&lt;')+'</td><td style="font-size:11px;color:var(--text-muted)">'+fmtDate(f.date)+'</td><td style="display:flex;gap:4px"><button class="btn btn-sm btn-edit" onclick="openModal(\'addFinding\','+fi+')">&#9998;</button><button class="btn btn-sm btn-danger" onclick="deleteFinding('+fi+')">&#x2715;</button></td></tr>';
   });
   h+='</tbody></table></div>';
   return h;
@@ -4330,7 +4332,7 @@ function exportPDF(){
   var con=docs.filter(function(d){return d.status==='concept';}).length;
   var p=implPct(c);
   var phRows=PHASES.map(function(ph){var pp=phasePct(c,ph);return'<tr><td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #E2E8F0">'+ph+'</td><td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #E2E8F0;text-align:center">'+pp.t+'</td><td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #E2E8F0;text-align:center;color:#0F6E56;font-weight:500">'+pp.a+'</td><td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;width:200px"><div style="width:100%;height:6px;background:#E2E8F0;border-radius:3px;margin-bottom:3px"><div style="width:'+pp.p+'%;height:100%;background:#1F55A6;border-radius:3px"></div></div><span style="font-size:11px;color:#5A6B7E">'+pp.p+'%</span></td></tr>';}).join('');
-  var docRows=docs.map(function(d){var col=d.status==='approved'?'#0F6E56':d.status==='review'?'#BA7517':'#5F5E5A';var lbl=d.status==='approved'?'Goedgekeurd':d.status==='review'?'In review':'Concept';return'<tr><td style="padding:7px 12px;font-size:12px;border-bottom:1px solid #E2E8F0;font-weight:500">'+d.name+'</td><td style="padding:7px 12px;font-size:12px;border-bottom:1px solid #E2E8F0;color:#5A6B7E">'+( d.category||'\u2014')+'</td><td style="padding:7px 12px;font-size:12px;border-bottom:1px solid #E2E8F0;color:#5A6B7E;font-family:monospace">'+(d.control||'\u2014')+'</td><td style="padding:7px 12px;font-size:12px;border-bottom:1px solid #E2E8F0;color:'+col+';font-weight:500">'+lbl+'</td><td style="padding:7px 12px;font-size:12px;border-bottom:1px solid #E2E8F0;color:#5A6B7E">'+(d.date||'\u2014')+'</td></tr>';}).join('');
+  var docRows=docs.map(function(d){var col=d.status==='approved'?'#0F6E56':d.status==='review'?'#BA7517':'#5F5E5A';var lbl=d.status==='approved'?'Goedgekeurd':d.status==='review'?'In review':'Concept';return'<tr><td style="padding:7px 12px;font-size:12px;border-bottom:1px solid #E2E8F0;font-weight:500">'+d.name+'</td><td style="padding:7px 12px;font-size:12px;border-bottom:1px solid #E2E8F0;color:#5A6B7E">'+( d.category||'\u2014')+'</td><td style="padding:7px 12px;font-size:12px;border-bottom:1px solid #E2E8F0;color:#5A6B7E;font-family:monospace">'+(d.control||'\u2014')+'</td><td style="padding:7px 12px;font-size:12px;border-bottom:1px solid #E2E8F0;color:'+col+';font-weight:500">'+lbl+'</td><td style="padding:7px 12px;font-size:12px;border-bottom:1px solid #E2E8F0;color:#5A6B7E">'+fmtDate(d.date)+'</td></tr>';}).join('');
   var noteRows=(c.noteLog||[]).slice().reverse().map(function(e){return'<tr><td style="padding:7px 12px;font-size:11px;font-family:monospace;color:#1F55A6;border-bottom:1px solid #E2E8F0;white-space:nowrap">'+e.date+'</td><td style="padding:7px 12px;font-size:12px;border-bottom:1px solid #E2E8F0;white-space:pre-wrap">'+e.text.replace(/</g,'&lt;')+'</td></tr>';}).join('');
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>ISO 27001 Rapport \u2014 '+c.name+'</title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;color:#0E2841;padding:40px;}@media print{body{padding:20px;}}</style></head><body><div style="background:#0E2841;padding:24px 32px;border-radius:8px;margin-bottom:32px;display:flex;align-items:center;justify-content:space-between"><div><div style="font-size:22px;font-weight:700;color:#fff">'+c.name+'</div><div style="font-size:13px;color:rgba(255,255,255,.5);margin-top:4px">ISO 27001:2022 Implementatiestatus &mdash; '+today()+'</div></div><div style="text-align:right"><div style="font-size:36px;font-weight:700;color:#fff">'+p+'%</div><div style="font-size:12px;color:rgba(255,255,255,.5)">voortgang</div></div></div>';
   html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:32px">'+ [['Goedgekeurd',apr,'#0F6E56'],['In review',rev,'#BA7517'],['Concept',con,'#5F5E5A'],['Totaal',docs.length,'#1F55A6']].map(function(x){return'<div style="border:1px solid #E2E8F0;border-radius:8px;padding:16px"><div style="font-size:26px;font-weight:700;color:'+x[2]+'">'+x[1]+'</div><div style="font-size:12px;color:#5A6B7E;margin-top:4px">'+x[0]+'</div></div>';}).join('')+'</div>';
