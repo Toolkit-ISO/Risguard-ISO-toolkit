@@ -769,11 +769,13 @@ function spPoll(){
     var ts=item.lastModifiedDateTime||null;
     if(ts&&ts!==SP_SYNC.lastVersion){
       SP_SYNC.lastVersion=ts;
+      SP_SYNC.polling=true; // vlag: we laden remote data, geen conflictcheck in saveDB
       return spReadDB().then(function(result){
         migrateDB(result.data);
         DB=result.data;
         localStorage.setItem('rg_v7',JSON.stringify(DB));
         SP_SYNC.lastVersion=result.version;
+        SP_SYNC.polling=false;
         // Niet renderen als gebruiker bezig is met interactie (dropdown, input)
         if(userIsInteracting()){
           _renderPending=true;
@@ -845,6 +847,16 @@ function spGetRemoteVersion(){
   }).then(function(item){return item.lastModifiedDateTime||null;});
 }
 
+// Stille opslag: alleen localStorage + SP schrijven, geen conflictcheck.
+// Gebruik voor structurele/migratie-saves die niet door de gebruiker zijn getriggerd.
+function saveLocalOnly(){
+  localStorage.setItem('rg_v7',JSON.stringify(DB));
+  if(SP_SYNC.online&&AUTH.user){
+    SP_SYNC.syncing=true;
+    spWriteDB(DB).catch(function(e){console.warn('SP silent save failed:',e);}).finally(function(){SP_SYNC.syncing=false;});
+  }
+}
+
 function saveDB(){
   localStorage.setItem('rg_v7',JSON.stringify(DB));
   if(SP_SYNC.online&&AUTH.user){
@@ -852,8 +864,8 @@ function saveDB(){
     spGetRemoteVersion().then(function(remoteTs){
       // Alleen een echte conflictmelding tonen als het tijdsverschil meer dan 30 seconden is.
       // Kleinere verschillen zijn poll-ruis (de achtergrondpoll werkt elk 10 seconden).
-      // Geen conflictcheck als lastVersion leeg is — eerste save na laden of nieuwe klant
-      if(remoteTs&&SP_SYNC.lastVersion&&SP_SYNC.lastVersion!==''&&remoteTs!==SP_SYNC.lastVersion){
+      // Geen conflictcheck als we zelf aan het polled zijn, of als lastVersion leeg is
+      if(remoteTs&&SP_SYNC.lastVersion&&SP_SYNC.lastVersion!==''&&!SP_SYNC.polling&&remoteTs!==SP_SYNC.lastVersion){
         var diffSec=Math.abs(new Date(remoteTs).getTime()-new Date(SP_SYNC.lastVersion).getTime())/1000;
         if(diffSec>30){
           var keepMine=confirm('\u26A0 Conflict: een collega heeft intussen wijzigingen opgeslagen.\n\nOK \u2014 jouw versie opslaan (de recente wijzigingen van je collega worden overschreven)\nAnnuleren \u2014 versie van je collega laden (jouw laatste wijziging gaat verloren)');
@@ -1241,13 +1253,9 @@ function cleanName(fn){return fn.replace(/\.(docx?|xlsx?|pdf|pptx?)$/i,'').repla
 // ═══════════════════════════════════════════
 // RENDER ROUTER
 // ═══════════════════════════════════════════
-// render() checks for active user interaction before rebuilding DOM
+// render() — altijd direct uitvoeren (gebruikersactie).
+// Alleen spPoll gebruikt de uitgestelde versie.
 function render(){
-  if(userIsInteracting&&userIsInteracting()){
-    _renderPending=true;
-    scheduleDeferredRender();
-    return;
-  }
   _renderCore();
 }
 
@@ -1497,10 +1505,12 @@ function renderDomainsTab(c){
     }
   });
   // Backfill controls on existing default domains that don't have them yet
+  var _backfillDone=false;
   c.domains.forEach(function(dom){
-    if(!dom.controls)dom.controls=(DOMAIN_CTRL_MAP[dom.name]||[]).slice();
+    if(!dom.controls){dom.controls=(DOMAIN_CTRL_MAP[dom.name]||[]).slice();_backfillDone=true;}
   });
-  saveDB();
+  // Alleen opslaan als er iets backfilled is, en dan zonder conflictcheck (structurele migratie)
+  if(_backfillDone)saveLocalOnly();
 
   var totalDocs=c.domains.reduce(function(a,d){return a+(d.docs||[]).length;},0);
   var h='<div style="margin-top:1rem">';
