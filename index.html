@@ -708,9 +708,14 @@ function spWriteDB(db){
       }).then(function(r){return r.json();});
     }).then(function(res){
       if(res.error)throw new Error(res.error.message);
-      // Update lastVersion direct vanuit de PATCH-response zodat de poll weet dat dit onze eigen write was
-      if(res.lastModifiedDateTime){SP_SYNC.lastVersion=res.lastModifiedDateTime;}
-      return res;
+      // De PATCH op /fields geeft alleen de fieldValueSet terug, zonder
+      // lastModifiedDateTime. Haal daarom de actuele itemversie op en zet
+      // lastVersion gelijk — anders ziet een volgende saveDB of de poll onze
+      // eigen schrijfactie aan voor een wijziging van een collega (false conflict).
+      return spGetRemoteVersion().then(function(ts){
+        if(ts)SP_SYNC.lastVersion=ts;
+        return res;
+      }).catch(function(){return res;});
     });
   });
 }
@@ -860,9 +865,14 @@ function saveLocalOnly(){
 
 function saveDB(){
   localStorage.setItem('rg_v7',JSON.stringify(DB));
-  if(SP_SYNC.online&&AUTH.user){
+  if(!(SP_SYNC.online&&AUTH.user))return;
+  // Serialiseer schrijfacties: bij snel achter elkaar opslaan (bv. meerdere
+  // applicable-toggles) mag een save de versie van een nog lopende eigen write
+  // niet als externe wijziging zien. De keten zorgt dat de conflictcheck van de
+  // volgende save pas draait nadat de vorige write lastVersion heeft bijgewerkt.
+  SP_SYNC.saveChain = (SP_SYNC.saveChain||Promise.resolve()).then(function(){
     SP_SYNC.syncing=true;
-    spGetRemoteVersion().then(function(remoteTs){
+    return spGetRemoteVersion().then(function(remoteTs){
       // Alleen een echte conflictmelding tonen als het tijdsverschil meer dan 30 seconden is.
       // Kleinere verschillen zijn poll-ruis (de achtergrondpoll werkt elk 10 seconden).
       // Geen conflictcheck als we zelf aan het polled zijn, of als lastVersion leeg is
@@ -885,8 +895,8 @@ function saveDB(){
         }
       }
       return spWriteDB(DB);
-    }).catch(function(e){console.warn('SP save failed:',e);}).finally(function(){SP_SYNC.syncing=false;});
-  }
+    });
+  }).catch(function(e){console.warn('SP save failed:',e);}).finally(function(){SP_SYNC.syncing=false;});
 }
 function clients(){return DB[ST.module]||[];}
 
