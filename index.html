@@ -2948,7 +2948,7 @@ function exportStatusReport(){
     var pctD=docs.length?Math.round(aprD/docs.length*100):0;
     domainRows+='<tr><td colspan="6" style="padding:0">'
       +'<div style="background:linear-gradient(90deg,#0E2841 0%,#1F55A6 100%);padding:9px 14px;display:flex;align-items:center;justify-content:space-between">'
-      +'<div style="font-size:12px;font-weight:700;color:#fff">&#128193; '+dom.name+'</div>'
+      +'<div style="font-size:12px;font-weight:700;color:#fff">&#128193; '+esc(dom.name)+'</div>'
       +'<div style="display:flex;align-items:center;gap:10px">'
       +(docs.length?'<span style="font-size:10px;color:rgba(255,255,255,.7)">'+docs.length+' doc'+(docs.length!==1?'s':'')+'</span>':'')
       +(docs.length?'<span style="font-size:10px;color:#86efac">'+aprD+' &#10003;</span><span style="font-size:10px;color:#fdba74;margin-left:4px">'+revD+' review</span><span style="font-size:10px;color:rgba(255,255,255,.5);margin-left:4px">'+conD+' concept</span>':'')
@@ -2961,14 +2961,14 @@ function exportStatusReport(){
     }
     docs.forEach(function(d,i){
       domainRows+='<tr style="background:'+(i%2===0?'#fff':'#F8FAFC')+'">'
-        +'<td style="padding:8px 14px;font-size:12px;font-weight:500;border-bottom:1px solid #E2E8F0;color:#0E2841">'+d.name+'</td>'
-        +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'+(d.category||'&mdash;')+'</td>'
-        +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0;font-family:monospace">'+(d.controls&&d.controls.length?d.controls.join(', '):(d.control||'&mdash;'))+'</td>'
+        +'<td style="padding:8px 14px;font-size:12px;font-weight:500;border-bottom:1px solid #E2E8F0;color:#0E2841">'+esc(d.name)+'</td>'
+        +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'+(d.category?esc(d.category):'&mdash;')+'</td>'
+        +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0;font-family:monospace">'+(d.controls&&d.controls.length?esc(d.controls.join(', ')):(d.control?esc(d.control):'&mdash;'))+'</td>'
         +'<td style="padding:8px 12px;border-bottom:1px solid #E2E8F0">'+badge(d.status)+'</td>'
         +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'
-          +(d.preparerName?'&#9998; '+d.preparerName:'')
-          +(d.reviewerName?'<br><span style="color:#1F55A6">&#128065; '+d.reviewerName+'</span>':'')
-          +(d.approvedBy?'<br><span style="color:#0F6E56;font-weight:600">&#10003; '+d.approvedBy+'</span>':(!d.preparerName?'&mdash;':''))
+          +(d.preparerName?'&#9998; '+esc(d.preparerName):'')
+          +(d.reviewerName?'<br><span style="color:#1F55A6">&#128065; '+esc(d.reviewerName)+'</span>':'')
+          +(d.approvedBy?'<br><span style="color:#0F6E56;font-weight:600">&#10003; '+esc(d.approvedBy)+'</span>':(!d.preparerName?'&mdash;':''))
           +'</td>'
         +'<td style="padding:8px 12px;font-size:11px;color:#94A3B8;border-bottom:1px solid #E2E8F0">'+(d.approvedAt?fmtDate(d.approvedAt):d.reviewedAt?'Review: '+fmtDate(d.reviewedAt):fmtDate(d.date))+'</td>'
         +'</tr>';
@@ -2984,24 +2984,24 @@ function exportStatusReport(){
       var bg=lvl==='hoog'?'#FEE2E2':lvl==='midden'?'#FFF3E0':'#E1F5EE';
       var stMap={open:'Open',in_behandeling:'In behandeling',behandeld:'Behandeld',geaccepteerd:'Geaccepteerd'};
       riskRows+='<tr>'
-        +'<td style="padding:7px 10px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0;font-family:monospace">'+riskNum(r)+'</td>'
-        +'<td style="padding:7px 10px;font-size:12px;font-weight:500;border-bottom:1px solid #E2E8F0">'+r.title+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0;font-family:monospace">'+esc(riskNum(r))+'</td>'
+        +'<td style="padding:7px 10px;font-size:12px;font-weight:500;border-bottom:1px solid #E2E8F0">'+esc(r.title)+'</td>'
         +'<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0"><span style="background:'+bg+';color:'+clr+';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">'+riskLbl(lvl)+'</span></td>'
-        +'<td style="padding:7px 10px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'+(r.owner||'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'+(r.owner?esc(r.owner):'—')+'</td>'
         +'<td style="padding:7px 10px;font-size:11px;border-bottom:1px solid #E2E8F0">'+(stMap[r.status]||'—')+'</td>'
         +'<td style="padding:7px 10px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'+(r.reviewDate?fmtDate(r.reviewDate):'—')+'</td>'
         +'</tr>';
     });
   }
 
-  var html='<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8"><title>Statusrapport — '+c.name+'</title>'
+  var html='<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8"><title>Statusrapport — '+esc(c.name)+'</title>'
     +'<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;color:#0E2841;background:#F1F4F7;padding:32px}@media print{body{background:#fff;padding:0}.no-print{display:none}}</style></head><body>'
     // Header
     +'<div style="background:#0E2841;color:#fff;border-radius:10px;padding:28px 36px;margin-bottom:24px;display:flex;align-items:flex-start;justify-content:space-between">'
     +'<div><div style="font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;opacity:.7;margin-bottom:6px">Statusrapport ISO 27001</div>'
-    +'<div style="font-size:26px;font-weight:700;margin-bottom:4px">'+c.name+'</div>'
-    +(c.contact?'<div style="opacity:.8;font-size:13px">'+c.contact+'</div>':'')
-    +'<div style="margin-top:12px;font-size:12px;opacity:.7">Gegenereerd op '+fmtDate(today())+' door '+(AUTH.user?AUTH.user.name:'Risguard')+'</div></div>'
+    +'<div style="font-size:26px;font-weight:700;margin-bottom:4px">'+esc(c.name)+'</div>'
+    +(c.contact?'<div style="opacity:.8;font-size:13px">'+esc(c.contact)+'</div>':'')
+    +'<div style="margin-top:12px;font-size:12px;opacity:.7">Gegenereerd op '+fmtDate(today())+' door '+esc(AUTH.user?AUTH.user.name:'Risguard')+'</div></div>'
     +'<div style="text-align:right">'
     +(c.certDate?'<div style="background:rgba(255,255,255,.12);border-radius:8px;padding:10px 16px"><div style="font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.08em">Streefdatum certificering</div><div style="font-size:18px;font-weight:700;margin-top:2px">'+fmtDate(c.certDate)+'</div></div>':'')
     +'</div></div>'
@@ -3028,7 +3028,7 @@ function exportStatusReport(){
     +(risks.length?
       '<div style="background:#fff;border-radius:8px;margin-bottom:24px;overflow:hidden">'
       +'<div style="background:#0E2841;color:#fff;padding:14px 20px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:space-between">'
-      +'<span>⚠ Risicoregister</span><span style="font-size:11px;opacity:.8">'+risks.length+' risico\'s &nbsp;·&nbsp; <span style="color:#fca5a5">'+rHoog+' hoog</span> &nbsp;·&nbsp; <span style="color:#fdba74">'+rMid+' midden</span> &nbsp;·&nbsp; <span style="color:#86efac">'+rLaag+' laag</span></span></div>'
+      +'<span>⚠ Risicoregister</span><span style="font-size:11px;opacity:.8">'+risks.length+' risico\'s &nbsp;·&nbsp; <span style="color:#fca5a5">'+rHoog+' hoog</span> &nbsp;·&nbsp; <span style="color:#fdba74">'+rMid+' midden</span> &nbsp;·&nbsp; <span style="color:#86efac">'+rLaag+' laag</span> &nbsp;·&nbsp; <span style="color:#86efac">'+rTreated+' behandeld/geaccepteerd</span></span></div>'
       +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
       +'<thead><tr style="background:#F8FAFC"><th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #E2E8F0">Nr</th>'
       +'<th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #E2E8F0">Risico</th>'
