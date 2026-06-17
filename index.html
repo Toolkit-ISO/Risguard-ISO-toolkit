@@ -1570,9 +1570,18 @@ function renderDomainsTab(c){
     function buildReviewRow(x){
       var doc=x.doc,di=x.di,doci=x.doci;
       var isPreparer=(myId&&doc.preparerId&&myId===doc.preparerId)||(myName&&doc.preparerName&&myName===doc.preparerName);
-      var approveBtn=isPreparer
-        ?'<button class="btn btn-sm" title="Je bent preparer van dit document" style="opacity:.45;cursor:not-allowed" onclick="alert(\'\u26D4 Je kunt dit document niet goedkeuren omdat je als preparer bent aangewezen.\')">&#10003; Goedkeuren</button>'
-        :'<button class="btn btn-sm" style="background:#E1F5EE;color:#0F6E56;border-color:#86efac;font-weight:600" onclick="cycleDomainDocStatus('+di+','+doci+')" title="Goedkeuren">&#10003; Goedkeuren</button>';
+      var isReviewer=(myId&&doc.reviewerId&&myId===doc.reviewerId)||(myName&&doc.reviewerName&&myName===doc.reviewerName);
+      var hasReviewer=!!(doc.reviewerId||doc.reviewerName);
+      var approveBtn;
+      if(isReviewer){
+        approveBtn='<button class="btn btn-sm" style="background:#E1F5EE;color:#0F6E56;border-color:#86efac;font-weight:600" onclick="cycleDomainDocStatus('+di+','+doci+')" title="Goedkeuren">&#10003; Goedkeuren</button>';
+      } else if(isPreparer){
+        approveBtn='<button class="btn btn-sm" title="Je bent preparer van dit document" style="opacity:.45;cursor:not-allowed" onclick="alert(\'\u26D4 Je kunt dit document niet goedkeuren omdat je als preparer bent aangewezen.\')">&#10003; Goedkeuren</button>';
+      } else if(!hasReviewer){
+        approveBtn='<button class="btn btn-sm" title="Geen reviewer aangewezen" style="opacity:.45;cursor:not-allowed" onclick="alert(\'\u26D4 Er is nog geen reviewer aangewezen voor dit document.\')">&#10003; Goedkeuren</button>';
+      } else {
+        approveBtn='<button class="btn btn-sm" title="Alleen de aangewezen reviewer kan goedkeuren" style="opacity:.45;cursor:not-allowed" onclick="alert(\'\u26D4 Alleen de aangewezen reviewer kan dit document goedkeuren.\')">&#10003; Goedkeuren</button>';
+      }
       var docLink=doc.link?'<a href="'+esc(doc.link)+'" target="_blank" style="font-size:11px;color:var(--blue);margin-left:6px">&#128196; openen</a>':'';
       var prepLabel=doc.preparerName?'<span style="font-size:10px;color:var(--text-muted)">&#9998; '+esc(doc.preparerName)+'</span>':'';
       var revLabel=doc.reviewerName?'<span style="font-size:10px;color:#1a6bbd">&#128065; '+esc(doc.reviewerName)+'</span>':'';
@@ -1751,11 +1760,21 @@ function cycleDomainDocStatus(di,doci){
   var _myId=AUTH.user?AUTH.user.localAccountId:'';
   var _myName=AUTH.user?AUTH.user.name:'';
 
-  // ── Blokkeer goedkeuring door de preparer van dit document ────────
+  // ── Goedkeuring: uitsluitend de aangewezen reviewer mag goedkeuren ─
   if(next==='approved'){
     var _isPreparer=(_myId&&doc.preparerId&&_myId===doc.preparerId)||(_myName&&doc.preparerName&&_myName===doc.preparerName);
+    var _hasReviewer=!!(doc.reviewerId||doc.reviewerName);
+    var _isReviewer=(_myId&&doc.reviewerId&&_myId===doc.reviewerId)||(_myName&&doc.reviewerName&&_myName===doc.reviewerName);
     if(_isPreparer){
       alert('\u26D4 Je kunt dit document niet goedkeuren omdat je als preparer bent aangewezen.\nLaat de reviewer "'+(doc.reviewerName||'reviewer')+'" het document goedkeuren.');
+      return;
+    }
+    if(!_hasReviewer){
+      alert('\u26D4 Er is nog geen reviewer aangewezen voor dit document.\nWijs eerst een reviewer aan voordat het kan worden goedgekeurd.');
+      return;
+    }
+    if(!_isReviewer){
+      alert('\u26D4 Alleen de aangewezen reviewer "'+(doc.reviewerName||'')+'" kan dit document goedkeuren.');
       return;
     }
   }
