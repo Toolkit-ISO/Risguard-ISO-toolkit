@@ -2139,7 +2139,6 @@ function renderSoaTab(c){
 
     // Status — automatisch ingevuld vanuit de documentstatus, maar handmatig aanpasbaar.
     if(ctrl.applicable){
-      var hasDocs=soaStatusFromDocs(c,ctrl.id)!==null;
       var implSty=soaImplColor(ctrl.implStatus);
       h+='<td>';
       h+='<select style="font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;font-weight:600;padding:2px;'+implSty+'" onchange="setSoaImpl('+ri+',this.value);updateSoaImplColor(this)">';
@@ -2149,8 +2148,6 @@ function renderSoaTab(c){
       h+='</select>';
       if(ctrl.implStatusManual){
         h+='<div style="font-size:9px;color:var(--text-muted);margin-top:2px">handmatig &middot; <a href="#" onclick="resetSoaImpl('+ri+');return false" style="color:#1a6bbd;text-decoration:none">&#8635; auto</a></div>';
-      } else if(hasDocs){
-        h+='<div style="font-size:9px;color:var(--text-muted);margin-top:2px">auto &middot; documentstatus</div>';
       }
       h+='</td>';
     } else {
