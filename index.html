@@ -566,20 +566,20 @@ var DEFAULT_DOMAINS=[
 
 // Suggested ISO controls per domain (Annex A + Clauses)
 var DOMAIN_CTRL_MAP={
-  'Governance & Beleid':            ['Clause 4.1','Clause 4.2','Clause 4.3','Clause 4.4','Clause 5.1','Clause 5.2','Clause 5.3','Clause 7.1','Clause 7.4','Clause 7.5.1','Clause 7.5.2','Clause 7.5.3','A.5.1','A.5.2','A.5.4','A.5.5','A.5.6','A.5.36','A.5.37'],
+  'Governance & Beleid':            ['Clause 4.1','Clause 4.2','Clause 4.3','Clause 4.4','Clause 5.1','Clause 5.2','Clause 5.3','Clause 7.1','Clause 7.4','Clause 7.5.1','Clause 7.5.2','Clause 7.5.3','A.5.1','A.5.2','A.5.3','A.5.4','A.5.5','A.5.6','A.5.37'],
   'Risicomanagement':               ['Clause 6.1','Clause 6.1.2','Clause 6.1.3','Clause 6.2','Clause 6.3','Clause 8.2','Clause 8.3','A.5.7','A.5.8'],
   'Asset Management':               ['A.5.9','A.5.10','A.5.11','A.5.12','A.5.13','A.5.14'],
-  'Access management':              ['A.5.3','A.5.15','A.5.16','A.5.17','A.5.18','A.8.2','A.8.3','A.8.4','A.8.5'],
+  'Access management':              ['A.5.15','A.5.16','A.5.17','A.5.18'],
   'Cryptografie':                   ['A.8.24'],
   'Fysieke beveiliging':            ['A.7.1','A.7.2','A.7.3','A.7.4','A.7.5','A.7.6','A.7.7','A.7.8','A.7.9','A.7.10','A.7.11','A.7.12','A.7.13','A.7.14'],
-  'Logische toegangsbeveiliging':   ['A.8.1','A.8.6','A.8.7','A.8.8','A.8.9','A.8.10','A.8.11','A.8.12','A.8.13','A.8.14','A.8.15','A.8.16','A.8.17','A.8.18','A.8.19'],
+  'Logische toegangsbeveiliging':   ['A.8.1','A.8.2','A.8.3','A.8.4','A.8.5','A.8.6','A.8.7','A.8.8','A.8.9','A.8.10','A.8.11','A.8.12','A.8.13','A.8.14','A.8.15','A.8.16','A.8.17','A.8.18','A.8.19','A.8.32'],
   'Netwerk beveiliging':            ['A.8.20','A.8.21','A.8.22','A.8.23'],
   'Leveranciersmanagement':         ['A.5.19','A.5.20','A.5.21','A.5.22','A.5.23'],
   'Incidentmanagement':             ['A.5.24','A.5.25','A.5.26','A.5.27','A.5.28','Clause 10.1','Clause 10.2'],
   'Bedrijfscontinuïteit':           ['A.5.29','A.5.30','Clause 8.1'],
-  'Compliance & Identity management':['A.5.31','A.5.32','A.5.33','A.5.34','A.5.35','Clause 9.1','Clause 9.2','Clause 9.3'],
+  'Compliance & Identity management':['A.5.31','A.5.32','A.5.33','A.5.34','A.5.35','A.5.36','Clause 9.1','Clause 9.2','Clause 9.3'],
   'HR beveiliging':                 ['Clause 7.2','Clause 7.3','A.6.1','A.6.2','A.6.3','A.6.4','A.6.5','A.6.6','A.6.7','A.6.8'],
-  'Secure development':             ['A.8.25','A.8.26','A.8.27','A.8.28','A.8.29','A.8.30','A.8.31','A.8.32','A.8.33','A.8.34']
+  'Secure development':             ['A.8.25','A.8.26','A.8.27','A.8.28','A.8.29','A.8.30','A.8.31','A.8.33','A.8.34']
 };
 var CONTROLS=['',
   // Clauses
@@ -921,51 +921,57 @@ function filtered(docs){var s=ST.search.toLowerCase();return docs.filter(functio
 // Auto detect
 // Multi-control map: primary control + also[] covers
 var MULTI_CTRL_MAP=[
-  // Policies covering multiple Annex A controls
+  // Documenten die meerdere Annex A-controls of clausules afdekken.
+  // Volgorde: specifiekere patronen eerst (eerste match wint).
   {re:/information.security.policy|isms.policy/,          ctrl:'A.5.1',  also:['A.5.4']},
-  {re:/access.control.policy|toegangsbeleid/,             ctrl:'A.5.15', also:['A.5.16','A.5.17','A.5.18']},
+  {re:/access.control.policy|toegangsbeleid/,             ctrl:'A.5.15', also:['A.5.16','A.5.17','A.5.18','A.8.2','A.8.3','A.8.5']},
   {re:/identity.*management|iam.policy/,                  ctrl:'A.5.16', also:['A.5.15','A.5.17','A.5.18']},
   {re:/user.access|access.rights.procedure/,              ctrl:'A.5.18', also:['A.5.15','A.5.16']},
-  {re:/incident.management.policy/,                       ctrl:'A.5.24', also:['A.5.25','A.5.26','A.5.27']},
+  {re:/privileged.access|pam/,                            ctrl:'A.8.2',  also:['A.8.18','A.8.5']},
+  {re:/incident.management.policy/,                       ctrl:'A.5.24', also:['A.5.25','A.5.26','A.5.27','A.5.28']},
   {re:/incident.response.procedure/,                      ctrl:'A.5.25', also:['A.5.24','A.5.26','A.5.27']},
-  {re:/business.continuity.plan|bcp/,                     ctrl:'A.5.29', also:['A.5.30','Clause 8.2','Clause 8.3']},
+  {re:/business.continuity.plan|bcp/,                     ctrl:'A.5.29', also:['A.5.30','A.8.14']},
   {re:/disaster.recovery/,                                ctrl:'A.5.30', also:['A.5.29']},
   {re:/supplier.security.policy/,                         ctrl:'A.5.19', also:['A.5.20','A.5.21','A.5.22']},
   {re:/supplier.*agreement|supplier.*requirements/,       ctrl:'A.5.20', also:['A.5.19','A.5.21']},
   {re:/supplier.*monitor/,                                ctrl:'A.5.22', also:['A.5.19','A.5.20']},
-  {re:/compliance.policy|compliance.register|compliance.obligations/, ctrl:'A.5.31', also:['A.5.32','A.5.33']},
-  {re:/privacy.*policy|privacy.management/,               ctrl:'A.5.34', also:['A.5.12','A.5.14']},
-  {re:/privileged.access|pam/,                            ctrl:'A.8.2',  also:['A.5.15','A.5.18','A.8.5']},
-  {re:/vulnerability|patch.management/,                   ctrl:'A.8.8',  also:['A.8.7','A.8.9']},
-  {re:/logging|log.management/,                           ctrl:'A.8.15', also:['A.8.16','A.9.1']},
-  {re:/backup/,                                           ctrl:'A.8.13', also:['A.8.14','A.5.29']},
-  {re:/network.security|network.*standard/,               ctrl:'A.8.20', also:['A.8.21','A.8.22']},
-  {re:/secure.sdlc|secure.*development/,                  ctrl:'A.8.25', also:['A.8.26','A.8.27','A.8.28','A.8.29']},
-  {re:/change.management/,                                ctrl:'A.8.32', also:['A.5.8','Clause 6.3']},
+  {re:/compliance.policy|compliance.register|compliance.obligations/, ctrl:'A.5.31', also:['A.5.32','A.5.33','A.5.36']},
+  {re:/classification.policy|information.*classification|data.*classification/, ctrl:'A.5.12', also:['A.5.13']},
+  {re:/privacy.*policy|privacy.management/,               ctrl:'A.5.34', also:[]},
+  {re:/asset.register|asset.inventory/,                   ctrl:'A.5.9',  also:['A.5.10','A.5.11']},
+  {re:/asset.management.policy/,                          ctrl:'A.5.9',  also:['A.5.10','A.5.11','A.5.12']},
   {re:/raci|roles.*responsib/,                            ctrl:'A.5.2',  also:['A.5.3','A.5.4']},
-  {re:/asset.register|asset.inventory/,                   ctrl:'A.5.9',  also:['A.5.10','A.5.11','A.5.12']},
-  {re:/asset.management.policy/,                          ctrl:'A.5.9',  also:['A.5.10','A.5.11']},
-  {re:/endpoint|user.device/,                             ctrl:'A.8.1',  also:['A.6.7','A.7.9','A.8.7']},
+  {re:/master.register.*organisational/,                  ctrl:'A.5.1',  also:['A.5.9','A.5.2']},
+  {re:/awareness|security.*training/,                     ctrl:'A.6.3',  also:['Clause 7.3']},
+  {re:/hr.*security|human.resource.*security|personnel.security/, ctrl:'A.6.1', also:['A.6.2','A.6.4','A.6.5','A.6.6']},
+  {re:/physical.security.*policy|physical.*perimeter/,    ctrl:'A.7.1',  also:['A.7.2','A.7.3','A.7.4']},
+  {re:/endpoint|user.device/,                             ctrl:'A.8.1',  also:['A.8.7']},
+  {re:/malware|antivirus/,                                ctrl:'A.8.7',  also:['A.8.1','A.8.8']},
+  {re:/vulnerability|patch.management/,                   ctrl:'A.8.8',  also:['A.8.7','A.8.9']},
+  {re:/configuration.management|hardening/,               ctrl:'A.8.9',  also:['A.8.19','A.8.32']},
+  {re:/backup/,                                           ctrl:'A.8.13', also:['A.8.14']},
+  {re:/logging|log.management/,                           ctrl:'A.8.15', also:['A.8.16','A.8.17']},
+  {re:/network.security|network.*standard/,               ctrl:'A.8.20', also:['A.8.21','A.8.22','A.8.23']},
+  {re:/cryptograph|encryption/,                           ctrl:'A.8.24', also:[]},
+  {re:/secure.sdlc|secure.*development/,                  ctrl:'A.8.25', also:['A.8.26','A.8.27','A.8.28','A.8.29','A.8.30','A.8.31']},
+  {re:/change.management/,                                ctrl:'A.8.32', also:['Clause 6.3']},
   {re:/risk.*register/,                                   ctrl:'Clause 6.1.2', also:['Clause 6.1','Clause 6.1.3']},
   {re:/risk.*treatment|soa/,                              ctrl:'Clause 6.1.3', also:['Clause 6.1.2','Clause 6.2']},
   {re:/internal.audit/,                                   ctrl:'Clause 9.2', also:['A.5.35','Clause 9.1']},
-  {re:/master.register.*organisational/,                  ctrl:'A.5.1',  also:['A.5.9','A.5.2']},
-  {re:/awareness|security.*training/,                     ctrl:'A.6.3',  also:['Clause 7.3','A.5.4']},
-  {re:/cryptograph|encryption/,                           ctrl:'A.8.24', also:['A.5.14','A.8.5']},
-  {re:/malware|antivirus/,                                ctrl:'A.8.7',  also:['A.8.1','A.8.8']},
-  {re:/configuration.management|hardening/,               ctrl:'A.8.9',  also:['A.8.8','A.8.19','A.8.32']},
 ];
 
 function getMultiControls(docName){
   var f=(docName||'').toLowerCase().replace(/[_\-.]+/g,' ').trim();
+  var out=null;
   for(var i=0;i<MULTI_CTRL_MAP.length;i++){
     if(MULTI_CTRL_MAP[i].re.test(f)){
-      return[MULTI_CTRL_MAP[i].ctrl].concat(MULTI_CTRL_MAP[i].also||[]);
+      out=[MULTI_CTRL_MAP[i].ctrl].concat(MULTI_CTRL_MAP[i].also||[]);
+      break;
     }
   }
-  // Fallback: run detectMeta and return just primary ctrl
-  var m=detectMeta(docName);
-  return m.ctrl?[m.ctrl]:[];
+  // Fallback: detectMeta en geef alleen de primaire control terug
+  if(!out){var m=detectMeta(docName);out=m.ctrl?[m.ctrl]:[];}
+  return uniqCtrls(out);
 }
 
 function detectMeta(fn){
@@ -3865,23 +3871,25 @@ function suggestedDomainForInbox(c, doc){
   return domainIndexForControl(c, det[0]);
 }
 
-// Beperk de gedetecteerde controls tot die welke in het gekozen domein zitten
-// (voorkomt dat een document controls uit een ander domein meekrijgt).
-// Valt terug op de primaire control.
-function controlsForDomain(c, di, detected){
-  var dom=(c.domains||[])[di];
-  if(!dom||!detected||!detected.length)return (detected||[]).slice(0,1);
-  var set=(dom.controls||[]).map(normalizeCtrlId);
-  var out=detected.filter(function(cv){return set.indexOf(normalizeCtrlId(cv))>=0;});
-  return out.length?out:detected.slice(0,1);
+// Dedup van een controllijst, primaire control eerst.
+function uniqCtrls(arr){
+  var seen={},res=[];
+  (arr||[]).forEach(function(cv){if(!cv)return;var k=normalizeCtrlId(cv);if(!seen[k]){seen[k]=1;res.push(cv);}});
+  return res;
 }
 
 // Kern: verplaats inbox-item naar domein zonder save/render (voor bulk).
+// Domeinen zijn op ONDERWERP ingedeeld (een domein kan zowel 5.x als 8.x
+// bevatten, bv. Access management). Het document krijgt alle gedetecteerde
+// controls mee die binnen dít onderwerp-domein vallen; controls die bij een
+// ander onderwerp horen worden weggelaten. Valt terug op de primaire control.
 function _fileInboxToDomain(c, ii, di){
   var doc=c.inbox[ii];
   if(!doc||!c.domains[di])return false;
-  var detected=Array.isArray(doc.controls)?doc.controls:(doc.control?[doc.control]:[]);
-  var ctrls=controlsForDomain(c, di, detected);
+  var detected=uniqCtrls(Array.isArray(doc.controls)?doc.controls:(doc.control?[doc.control]:[]));
+  var domSet=(c.domains[di].controls||[]).map(normalizeCtrlId);
+  var inDom=detected.filter(function(cv){return domSet.indexOf(normalizeCtrlId(cv))>=0;});
+  var ctrls=inDom.length?inDom:detected.slice(0,1);
   c.domains[di].docs=c.domains[di].docs||[];
   c.domains[di].docs.push({name:doc.name,link:doc.link||'',controls:ctrls,control:ctrls[0]||'',category:doc.category||'',status:doc.status||'concept',date:today(),note:''});
   c.inbox.splice(ii,1);
