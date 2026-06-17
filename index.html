@@ -1985,6 +1985,7 @@ function getSoaControls(c){
     });
     c.soaControls=base;
   }
+  syncSoaFromDocs(c); // implStatus volgt automatisch de documentstatus
   return base;
 }
 
@@ -1997,9 +1998,34 @@ function saveSoaField(idx,field,val){
   if(val==='false')val=false;
   ctrls[idx][field]=val;
   if(field==='applicable'&&!val){ctrls[idx].implStatus='na';}
-  if(field==='applicable'&&val&&ctrls[idx].implStatus==='na'){ctrls[idx].implStatus='planned';}
+  if(field==='applicable'&&val&&ctrls[idx].implStatus==='na'){ctrls[idx].implStatus='planned';ctrls[idx].implStatusManual=false;}
   saveDB();
   // Full re-render so toggle, colors and progress bar all update live
+  render();
+}
+
+// Handmatige statuskeuze: markeer als override zodat de auto-sync deze
+// control voortaan niet meer overschrijft.
+function setSoaImpl(idx,val){
+  var c=clients()[ST.sel];if(!c)return;
+  var ctrls=getSoaControls(c);
+  if(!ctrls[idx])return;
+  ctrls[idx].implStatus=val;
+  ctrls[idx].implStatusManual=true;
+  saveDB();
+  render();
+}
+
+// Zet de control terug op automatisch: override opheffen en direct
+// opnieuw afleiden uit de documentstatus.
+function resetSoaImpl(idx){
+  var c=clients()[ST.sel];if(!c)return;
+  var ctrls=getSoaControls(c);
+  if(!ctrls[idx])return;
+  ctrls[idx].implStatusManual=false;
+  var derived=soaStatusFromDocs(c,ctrls[idx].id);
+  if(derived)ctrls[idx].implStatus=derived;
+  saveDB();
   render();
 }
 
@@ -2083,7 +2109,8 @@ function renderSoaTab(c){
     }
 
     h+='<tr'+(naRow?' class="na-row"':'')+'>';
-    h+='<td style="font-size:11px;color:var(--text-muted)">A.'+ctrl.id+'</td>';
+    var _dd=aDesc(ctrl.id);var _cidFull='A.'+ctrl.id;
+    h+='<td><button onclick="showControlDesc(\'annex\',\''+encodeURIComponent(_cidFull)+'\',\''+encodeURIComponent(_dd.desc||_dd.req||ctrl.name)+'\',\''+encodeURIComponent(_dd.q||'')+'\',\''+encodeURIComponent(_dd.doc||'')+'\',\''+encodeURIComponent(ctrl.name)+'\')" title="Bekijk control omschrijving" style="background:#EEF3FA;color:#1F3864;border:1px solid #C8D8EA;padding:2px 7px;border-radius:8px;font-family:DM Mono,monospace;font-size:10px;cursor:pointer;font-weight:500">'+_cidFull+'</button></td>';
     h+='<td style="font-size:12px">'+ctrl.name+'</td>';
 
     // Applicable toggle — calls saveSoaField which re-renders
@@ -2110,15 +2137,21 @@ function renderSoaTab(c){
     }
     h+='</td>';
 
-    // Status select with colored background — options get neutral bg to prevent bleed
+    // Status — automatisch ingevuld vanuit de documentstatus, maar handmatig aanpasbaar.
     if(ctrl.applicable){
+      var hasDocs=soaStatusFromDocs(c,ctrl.id)!==null;
       var implSty=soaImplColor(ctrl.implStatus);
       h+='<td>';
-      h+='<select style="font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;font-weight:600;padding:2px;'+implSty+'" onchange="saveSoaField('+ri+',\'implStatus\',this.value);updateSoaImplColor(this)">';
+      h+='<select style="font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;font-weight:600;padding:2px;'+implSty+'" onchange="setSoaImpl('+ri+',this.value);updateSoaImplColor(this)">';
       [['implemented','Implemented','#E1F5EE','#0F6E56'],['in_progress','In Progress','#FFF3E0','#B45309'],['planned','Planned','#EBF2FF','#1a6bbd']].forEach(function(opt){
         h+='<option value="'+opt[0]+'"'+(ctrl.implStatus===opt[0]?' selected':'')+' style="background:'+opt[2]+';color:'+opt[3]+'">'+opt[1]+'</option>';
       });
       h+='</select>';
+      if(ctrl.implStatusManual){
+        h+='<div style="font-size:9px;color:var(--text-muted);margin-top:2px">handmatig &middot; <a href="#" onclick="resetSoaImpl('+ri+');return false" style="color:#1a6bbd;text-decoration:none">&#8635; auto</a></div>';
+      } else if(hasDocs){
+        h+='<div style="font-size:9px;color:var(--text-muted);margin-top:2px">auto &middot; documentstatus</div>';
+      }
       h+='</td>';
     } else {
       h+='<td><span style="font-size:11px;color:var(--text-muted)">N/A</span></td>';
@@ -2163,6 +2196,42 @@ function getImplDocsForControl(c, controlId){
 function getImplDocForControl(c, controlId){
   var docs=getImplDocsForControl(c,controlId);
   return docs.length?docs[0]:'';
+}
+
+// Leid SoA-implementatiestatus af van de status van gekoppelde documenten.
+// concept -> planned, in review -> in_progress, goedgekeurd -> implemented.
+// Bij meerdere documenten: alles goedgekeurd = implemented, iets in review/
+// goedgekeurd = in_progress, alles concept = planned. Geen gekoppeld document
+// -> null (status blijft handmatig instelbaar).
+function soaStatusFromDocs(c, controlId){
+  var norm=normalizeCtrlId(controlId);
+  var statuses=[];
+  (c.domains||[]).forEach(function(dom){
+    (dom.docs||[]).forEach(function(doc){
+      var ctrls=doc.controls||[];
+      var match=ctrls.some(function(cv){return cv===controlId||normalizeCtrlId(cv)===norm;})
+                ||doc.control===controlId||normalizeCtrlId(doc.control||'')===norm;
+      if(match)statuses.push(doc.status||'concept');
+    });
+  });
+  if(!statuses.length)return null; // geen gekoppeld document
+  if(statuses.every(function(s){return s==='approved';}))return 'implemented';
+  if(statuses.some(function(s){return s==='review'||s==='approved';}))return 'in_progress';
+  return 'planned'; // alle documenten staan op concept
+}
+
+// Synchroniseer implStatus van alle applicable SoA-controls met de
+// documentstatus. Uitgesloten (N/A) en handmatig overschreven controls
+// blijven ongemoeid.
+function syncSoaFromDocs(c){
+  if(!c||!c.soaControls)return false;
+  var changed=false;
+  c.soaControls.forEach(function(ctrl){
+    if(!ctrl.applicable||ctrl.implStatusManual)return;
+    var derived=soaStatusFromDocs(c,ctrl.id);
+    if(derived&&ctrl.implStatus!==derived){ctrl.implStatus=derived;changed=true;}
+  });
+  return changed;
 }
 
 // ── SoA Excel Export ────────────────────────────────────────────────
