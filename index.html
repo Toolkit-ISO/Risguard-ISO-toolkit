@@ -1530,11 +1530,15 @@ function renderDomainsTab(c){
 
   // ── INBOX ────────────────────────────────────────────────────────
   if(c.inbox.length){
+    var _rec=c.inbox.filter(function(d){return suggestedDomainForInbox(c,d)>=0;}).length;
     h+='<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:var(--radius);padding:14px 16px;margin-bottom:1.25rem">';
     h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
     h+='<div><div style="font-size:13px;font-weight:600;color:#92400E">&#128228; Inbox — '+c.inbox.length+' document'+(c.inbox.length!==1?'en':'')+' wachten op indeling</div>';
     h+='<div style="font-size:11px;color:#B45309;margin-top:2px">Sleep documenten naar een domein hieronder, of klik het map-icoon om te verplaatsen.</div></div>';
+    h+='<div style="display:flex;align-items:center;gap:6px">';
+    if(_rec)h+='<button onclick="autoFileAllInbox()" class="btn btn-sm btn-primary" style="font-size:11px">&#10003; '+_rec+' automatisch indelen</button>';
     h+='<button onclick="clearInbox()" class="btn btn-sm" style="font-size:11px;color:#DC2626;border-color:#FCA5A5">&#x2715; Inbox leegmaken</button>';
+    h+='</div>';
     h+='</div>';
     h+='<div style="display:flex;flex-direction:column;gap:6px" id="inbox-list">';
     c.inbox.forEach(function(doc,ii){
@@ -1544,6 +1548,12 @@ function renderDomainsTab(c){
       h+='<div style="font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+doc.name+'</div>';
       if(doc.link)h+='<a href="'+doc.link+'" target="_blank" style="font-size:11px;color:var(--blue)">&#128279; Openen in SharePoint</a>';
       h+='</div>';
+      var _sdi=suggestedDomainForInbox(c,doc);
+      if(_sdi>=0){
+        var _sd=c.domains[_sdi];
+        var _pc=(Array.isArray(doc.controls)&&doc.controls.length)?doc.controls[0]:'';
+        h+='<button onclick="autoFileInbox('+ii+')" class="btn btn-sm" title="Indelen bij '+esc(_sd.name)+'" style="font-size:11px;background:#E1F5EE;color:#0F6E56;border-color:#86efac;font-weight:600;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis">&#10003; '+esc(_sd.name)+(_pc?' &middot; '+esc(_pc):'')+'</button>';
+      }
       h+='<select onchange="moveInboxToDomain('+ii+',this.value)" style="font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-family:DM Sans,sans-serif;max-width:160px">';
       h+='<option value="">&#128194; Naar domein...</option>';
       c.domains.forEach(function(dom,di){
@@ -3831,17 +3841,80 @@ function saveNewDomain(){
   saveDB();closeModal();render();
 }
 
+// Control -> domein-index voor de huidige klant. Zoekt in de (mogelijk
+// hernoemde/aangepaste) domeinen van de klant zelf; controls worden
+// genormaliseerd zodat 'A.5.1' en '5.1' / 'Clause 6.1' matchen.
+function domainIndexForControl(c, ctrlId){
+  if(!c||!ctrlId)return -1;
+  var target=normalizeCtrlId(ctrlId);
+  var doms=c.domains||[];
+  for(var i=0;i<doms.length;i++){
+    var ctrls=doms[i].controls||[];
+    for(var j=0;j<ctrls.length;j++){
+      if(normalizeCtrlId(ctrls[j])===target)return i;
+    }
+  }
+  return -1;
+}
+
+// Voorgesteld domein voor een inbox-item op basis van de primaire
+// gedetecteerde control. -1 = geen suggestie (twijfelgeval, blijft in inbox).
+function suggestedDomainForInbox(c, doc){
+  var det=Array.isArray(doc.controls)?doc.controls:(doc.control?[doc.control]:[]);
+  if(!det.length)return -1;
+  return domainIndexForControl(c, det[0]);
+}
+
+// Beperk de gedetecteerde controls tot die welke in het gekozen domein zitten
+// (voorkomt dat een document controls uit een ander domein meekrijgt).
+// Valt terug op de primaire control.
+function controlsForDomain(c, di, detected){
+  var dom=(c.domains||[])[di];
+  if(!dom||!detected||!detected.length)return (detected||[]).slice(0,1);
+  var set=(dom.controls||[]).map(normalizeCtrlId);
+  var out=detected.filter(function(cv){return set.indexOf(normalizeCtrlId(cv))>=0;});
+  return out.length?out:detected.slice(0,1);
+}
+
+// Kern: verplaats inbox-item naar domein zonder save/render (voor bulk).
+function _fileInboxToDomain(c, ii, di){
+  var doc=c.inbox[ii];
+  if(!doc||!c.domains[di])return false;
+  var detected=Array.isArray(doc.controls)?doc.controls:(doc.control?[doc.control]:[]);
+  var ctrls=controlsForDomain(c, di, detected);
+  c.domains[di].docs=c.domains[di].docs||[];
+  c.domains[di].docs.push({name:doc.name,link:doc.link||'',controls:ctrls,control:ctrls[0]||'',category:doc.category||'',status:doc.status||'concept',date:today(),note:''});
+  c.inbox.splice(ii,1);
+  if(ST.openDomains)ST.openDomains[di]=true;
+  return true;
+}
+
 function moveInboxToDomain(ii,diStr){
   if(diStr==='')return;
   var di=parseInt(diStr);
   var c=clients()[ST.sel];if(!c||!c.inbox)return;
-  var doc=c.inbox[ii];
-  if(!doc)return;
-  c.domains[di].docs=c.domains[di].docs||[];
-  c.domains[di].docs.push({name:doc.name,link:doc.link||'',controls:doc.controls||[],control:doc.control||'',category:doc.category||'',status:doc.status||'concept',date:today(),note:''});
-  c.inbox.splice(ii,1);
-  if(ST.openDomains)ST.openDomains[di]=true;
-  saveDB();render();
+  if(_fileInboxToDomain(c, ii, di)){saveDB();render();}
+}
+
+// 1-klik: deel dit inbox-item in bij het voorgestelde domein.
+function autoFileInbox(ii){
+  var c=clients()[ST.sel];if(!c||!c.inbox)return;
+  var di=suggestedDomainForInbox(c, c.inbox[ii]);
+  if(di<0){alert('Geen domein herkend voor dit document. Sleep het of kies handmatig een domein.');return;}
+  if(_fileInboxToDomain(c, ii, di)){saveDB();render();}
+}
+
+// Bulk: deel alle herkende inbox-items in. Van achteren naar voren zodat de
+// splices de nog te verwerken indexen niet verschuiven.
+function autoFileAllInbox(){
+  var c=clients()[ST.sel];if(!c||!c.inbox)return;
+  var filed=0;
+  for(var i=c.inbox.length-1;i>=0;i--){
+    var di=suggestedDomainForInbox(c, c.inbox[i]);
+    if(di>=0&&_fileInboxToDomain(c, i, di))filed++;
+  }
+  if(filed){saveDB();render();}
+  else alert('Geen herkende documenten om automatisch in te delen.');
 }
 
 function removeFromInbox(ii){
@@ -4522,12 +4595,13 @@ function importFromSharePoint(){
         var cleaned=cleanName(item.name);
         if(c.inbox.some(function(d){return d.spId===item.id||d.name===cleaned;}))return;
         var m=detectMeta(item.name);
+        var det=getMultiControls(item.name);
         c.inbox.push({
           name:cleaned,
           link:item.webUrl||'',
           category:m.cat||'',
-          control:'',
-          controls:[],
+          control:det[0]||'',
+          controls:det,
           status:'concept',
           date:today(),
           spId:item.id
