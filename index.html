@@ -320,7 +320,7 @@ var MSAL_CONFIG={
   },
   cache:{cacheLocation:'sessionStorage',storeAuthStateInCookie:false}
 };
-var GRAPH_SCOPES=['User.Read','Sites.ReadWrite.All','Files.ReadWrite.All'];
+var GRAPH_SCOPES=['User.Read','Sites.ReadWrite.All','Files.ReadWrite.All','Mail.Send'];
 var msalInstance=null;
 var AUTH={user:null,token:null,ready:false};
 
@@ -551,35 +551,35 @@ var DEFAULT_DOMAINS=[
   'Governance & Beleid',
   'Risicomanagement',
   'Asset Management',
-  'Access management',
+  'Toegangsbeheer',
   'Cryptografie',
   'Fysieke beveiliging',
-  'Logische toegangsbeveiliging',
-  'Netwerk beveiliging',
-  'Leveranciersmanagement',
-  'Incidentmanagement',
+  'Operationele beveiliging',
+  'Communicatiebeveiliging',
+  'Leveranciersbeheer',
+  'Incidentbeheer',
   'Bedrijfscontinuïteit',
-  'Compliance & Identity management',
-  'HR beveiliging',
-  'Secure development'
+  'Compliance & Audit',
+  'HR & Bewustwording',
+  'Ontwikkeling & Onderhoud'
 ];
 
 // Suggested ISO controls per domain (Annex A + Clauses)
 var DOMAIN_CTRL_MAP={
-  'Governance & Beleid':            ['Clause 4.1','Clause 4.2','Clause 4.3','Clause 4.4','Clause 5.1','Clause 5.2','Clause 5.3','Clause 7.1','Clause 7.4','Clause 7.5.1','Clause 7.5.2','Clause 7.5.3','A.5.1','A.5.2','A.5.3','A.5.4','A.5.5','A.5.6','A.5.37'],
-  'Risicomanagement':               ['Clause 6.1','Clause 6.1.2','Clause 6.1.3','Clause 6.2','Clause 6.3','Clause 8.2','Clause 8.3','A.5.7','A.5.8'],
-  'Asset Management':               ['A.5.9','A.5.10','A.5.11','A.5.12','A.5.13','A.5.14'],
-  'Access management':              ['A.5.15','A.5.16','A.5.17','A.5.18'],
-  'Cryptografie':                   ['A.8.24'],
-  'Fysieke beveiliging':            ['A.7.1','A.7.2','A.7.3','A.7.4','A.7.5','A.7.6','A.7.7','A.7.8','A.7.9','A.7.10','A.7.11','A.7.12','A.7.13','A.7.14'],
-  'Logische toegangsbeveiliging':   ['A.8.1','A.8.2','A.8.3','A.8.4','A.8.5','A.8.6','A.8.7','A.8.8','A.8.9','A.8.10','A.8.11','A.8.12','A.8.13','A.8.14','A.8.15','A.8.16','A.8.17','A.8.18','A.8.19','A.8.32'],
-  'Netwerk beveiliging':            ['A.8.20','A.8.21','A.8.22','A.8.23'],
-  'Leveranciersmanagement':         ['A.5.19','A.5.20','A.5.21','A.5.22','A.5.23'],
-  'Incidentmanagement':             ['A.5.24','A.5.25','A.5.26','A.5.27','A.5.28','Clause 10.1','Clause 10.2'],
-  'Bedrijfscontinuïteit':           ['A.5.29','A.5.30','Clause 8.1'],
-  'Compliance & Identity management':['A.5.31','A.5.32','A.5.33','A.5.34','A.5.35','A.5.36','Clause 9.1','Clause 9.2','Clause 9.3'],
-  'HR beveiliging':                 ['Clause 7.2','Clause 7.3','A.6.1','A.6.2','A.6.3','A.6.4','A.6.5','A.6.6','A.6.7','A.6.8'],
-  'Secure development':             ['A.8.25','A.8.26','A.8.27','A.8.28','A.8.29','A.8.30','A.8.31','A.8.33','A.8.34']
+  'Governance & Beleid':       ['Clause 4.1','Clause 4.2','Clause 4.3','Clause 4.4','Clause 5.1','Clause 5.2','Clause 5.3','A.5.1','A.5.2','A.5.4','A.5.36','A.5.37'],
+  'Risicomanagement':          ['Clause 6.1','Clause 6.1.2','Clause 6.1.3','Clause 6.2','Clause 8.2','Clause 8.3','A.5.7','A.5.8'],
+  'Asset Management':          ['A.5.9','A.5.10','A.5.11','A.5.12','A.5.13','A.5.14'],
+  'Toegangsbeheer':            ['A.5.15','A.5.16','A.5.17','A.5.18','A.8.2','A.8.3','A.8.4','A.8.5'],
+  'Cryptografie':              ['A.8.24'],
+  'Fysieke beveiliging':       ['A.7.1','A.7.2','A.7.3','A.7.4','A.7.5','A.7.6','A.7.7','A.7.8','A.7.9','A.7.10','A.7.11','A.7.12','A.7.13','A.7.14'],
+  'Operationele beveiliging':  ['A.8.1','A.8.6','A.8.7','A.8.8','A.8.9','A.8.10','A.8.11','A.8.12','A.8.13','A.8.14','A.8.15','A.8.16','A.8.17','A.8.18','A.8.19'],
+  'Communicatiebeveiliging':   ['A.8.20','A.8.21','A.8.22','A.8.23'],
+  'Leveranciersbeheer':        ['A.5.19','A.5.20','A.5.21','A.5.22','A.5.23'],
+  'Incidentbeheer':            ['A.5.24','A.5.25','A.5.26','A.5.27','A.5.28','Clause 10.1','Clause 10.2'],
+  'Bedrijfscontinuïteit':      ['A.5.29','A.5.30','Clause 8.1'],
+  'Compliance & Audit':        ['A.5.31','A.5.32','A.5.33','A.5.34','A.5.35','Clause 9.1','Clause 9.2','Clause 9.3'],
+  'HR & Bewustwording':        ['A.6.1','A.6.2','A.6.3','A.6.4','A.6.5','A.6.6','A.6.7','A.6.8'],
+  'Ontwikkeling & Onderhoud':  ['A.8.25','A.8.26','A.8.27','A.8.28','A.8.29','A.8.30','A.8.31','A.8.32','A.8.33','A.8.34']
 };
 var CONTROLS=['',
   // Clauses
@@ -708,14 +708,9 @@ function spWriteDB(db){
       }).then(function(r){return r.json();});
     }).then(function(res){
       if(res.error)throw new Error(res.error.message);
-      // De PATCH op /fields geeft alleen de fieldValueSet terug, zonder
-      // lastModifiedDateTime. Haal daarom de actuele itemversie op en zet
-      // lastVersion gelijk — anders ziet een volgende saveDB of de poll onze
-      // eigen schrijfactie aan voor een wijziging van een collega (false conflict).
-      return spGetRemoteVersion().then(function(ts){
-        if(ts)SP_SYNC.lastVersion=ts;
-        return res;
-      }).catch(function(){return res;});
+      // Update lastVersion direct vanuit de PATCH-response zodat de poll weet dat dit onze eigen write was
+      if(res.lastModifiedDateTime){SP_SYNC.lastVersion=res.lastModifiedDateTime;}
+      return res;
     });
   });
 }
@@ -865,14 +860,9 @@ function saveLocalOnly(){
 
 function saveDB(){
   localStorage.setItem('rg_v7',JSON.stringify(DB));
-  if(!(SP_SYNC.online&&AUTH.user))return;
-  // Serialiseer schrijfacties: bij snel achter elkaar opslaan (bv. meerdere
-  // applicable-toggles) mag een save de versie van een nog lopende eigen write
-  // niet als externe wijziging zien. De keten zorgt dat de conflictcheck van de
-  // volgende save pas draait nadat de vorige write lastVersion heeft bijgewerkt.
-  SP_SYNC.saveChain = (SP_SYNC.saveChain||Promise.resolve()).then(function(){
+  if(SP_SYNC.online&&AUTH.user){
     SP_SYNC.syncing=true;
-    return spGetRemoteVersion().then(function(remoteTs){
+    spGetRemoteVersion().then(function(remoteTs){
       // Alleen een echte conflictmelding tonen als het tijdsverschil meer dan 30 seconden is.
       // Kleinere verschillen zijn poll-ruis (de achtergrondpoll werkt elk 10 seconden).
       // Geen conflictcheck als we zelf aan het polled zijn, of als lastVersion leeg is
@@ -895,8 +885,8 @@ function saveDB(){
         }
       }
       return spWriteDB(DB);
-    });
-  }).catch(function(e){console.warn('SP save failed:',e);}).finally(function(){SP_SYNC.syncing=false;});
+    }).catch(function(e){console.warn('SP save failed:',e);}).finally(function(){SP_SYNC.syncing=false;});
+  }
 }
 function clients(){return DB[ST.module]||[];}
 
@@ -921,57 +911,51 @@ function filtered(docs){var s=ST.search.toLowerCase();return docs.filter(functio
 // Auto detect
 // Multi-control map: primary control + also[] covers
 var MULTI_CTRL_MAP=[
-  // Documenten die meerdere Annex A-controls of clausules afdekken.
-  // Volgorde: specifiekere patronen eerst (eerste match wint).
+  // Policies covering multiple Annex A controls
   {re:/information.security.policy|isms.policy/,          ctrl:'A.5.1',  also:['A.5.4']},
-  {re:/access.control.policy|toegangsbeleid/,             ctrl:'A.5.15', also:['A.5.16','A.5.17','A.5.18','A.8.2','A.8.3','A.8.5']},
+  {re:/access.control.policy|toegangsbeleid/,             ctrl:'A.5.15', also:['A.5.16','A.5.17','A.5.18']},
   {re:/identity.*management|iam.policy/,                  ctrl:'A.5.16', also:['A.5.15','A.5.17','A.5.18']},
   {re:/user.access|access.rights.procedure/,              ctrl:'A.5.18', also:['A.5.15','A.5.16']},
-  {re:/privileged.access|pam/,                            ctrl:'A.8.2',  also:['A.8.18','A.8.5']},
-  {re:/incident.management.policy/,                       ctrl:'A.5.24', also:['A.5.25','A.5.26','A.5.27','A.5.28']},
+  {re:/incident.management.policy/,                       ctrl:'A.5.24', also:['A.5.25','A.5.26','A.5.27']},
   {re:/incident.response.procedure/,                      ctrl:'A.5.25', also:['A.5.24','A.5.26','A.5.27']},
-  {re:/business.continuity.plan|bcp/,                     ctrl:'A.5.29', also:['A.5.30','A.8.14']},
+  {re:/business.continuity.plan|bcp/,                     ctrl:'A.5.29', also:['A.5.30','Clause 8.2','Clause 8.3']},
   {re:/disaster.recovery/,                                ctrl:'A.5.30', also:['A.5.29']},
   {re:/supplier.security.policy/,                         ctrl:'A.5.19', also:['A.5.20','A.5.21','A.5.22']},
   {re:/supplier.*agreement|supplier.*requirements/,       ctrl:'A.5.20', also:['A.5.19','A.5.21']},
   {re:/supplier.*monitor/,                                ctrl:'A.5.22', also:['A.5.19','A.5.20']},
-  {re:/compliance.policy|compliance.register|compliance.obligations/, ctrl:'A.5.31', also:['A.5.32','A.5.33','A.5.36']},
-  {re:/classification.policy|information.*classification|data.*classification/, ctrl:'A.5.12', also:['A.5.13']},
-  {re:/privacy.*policy|privacy.management/,               ctrl:'A.5.34', also:[]},
-  {re:/asset.register|asset.inventory/,                   ctrl:'A.5.9',  also:['A.5.10','A.5.11']},
-  {re:/asset.management.policy/,                          ctrl:'A.5.9',  also:['A.5.10','A.5.11','A.5.12']},
-  {re:/raci|roles.*responsib/,                            ctrl:'A.5.2',  also:['A.5.3','A.5.4']},
-  {re:/master.register.*organisational/,                  ctrl:'A.5.1',  also:['A.5.9','A.5.2']},
-  {re:/awareness|security.*training/,                     ctrl:'A.6.3',  also:['Clause 7.3']},
-  {re:/hr.*security|human.resource.*security|personnel.security/, ctrl:'A.6.1', also:['A.6.2','A.6.4','A.6.5','A.6.6']},
-  {re:/physical.security.*policy|physical.*perimeter/,    ctrl:'A.7.1',  also:['A.7.2','A.7.3','A.7.4']},
-  {re:/endpoint|user.device/,                             ctrl:'A.8.1',  also:['A.8.7']},
-  {re:/malware|antivirus/,                                ctrl:'A.8.7',  also:['A.8.1','A.8.8']},
+  {re:/compliance.policy|compliance.register|compliance.obligations/, ctrl:'A.5.31', also:['A.5.32','A.5.33']},
+  {re:/privacy.*policy|privacy.management/,               ctrl:'A.5.34', also:['A.5.12','A.5.14']},
+  {re:/privileged.access|pam/,                            ctrl:'A.8.2',  also:['A.5.15','A.5.18','A.8.5']},
   {re:/vulnerability|patch.management/,                   ctrl:'A.8.8',  also:['A.8.7','A.8.9']},
-  {re:/configuration.management|hardening/,               ctrl:'A.8.9',  also:['A.8.19','A.8.32']},
-  {re:/backup/,                                           ctrl:'A.8.13', also:['A.8.14']},
-  {re:/logging|log.management/,                           ctrl:'A.8.15', also:['A.8.16','A.8.17']},
-  {re:/network.security|network.*standard/,               ctrl:'A.8.20', also:['A.8.21','A.8.22','A.8.23']},
-  {re:/cryptograph|encryption/,                           ctrl:'A.8.24', also:[]},
-  {re:/secure.sdlc|secure.*development/,                  ctrl:'A.8.25', also:['A.8.26','A.8.27','A.8.28','A.8.29','A.8.30','A.8.31']},
-  {re:/change.management/,                                ctrl:'A.8.32', also:['Clause 6.3']},
+  {re:/logging|log.management/,                           ctrl:'A.8.15', also:['A.8.16','A.9.1']},
+  {re:/backup/,                                           ctrl:'A.8.13', also:['A.8.14','A.5.29']},
+  {re:/network.security|network.*standard/,               ctrl:'A.8.20', also:['A.8.21','A.8.22']},
+  {re:/secure.sdlc|secure.*development/,                  ctrl:'A.8.25', also:['A.8.26','A.8.27','A.8.28','A.8.29']},
+  {re:/change.management/,                                ctrl:'A.8.32', also:['A.5.8','Clause 6.3']},
+  {re:/raci|roles.*responsib/,                            ctrl:'A.5.2',  also:['A.5.3','A.5.4']},
+  {re:/asset.register|asset.inventory/,                   ctrl:'A.5.9',  also:['A.5.10','A.5.11','A.5.12']},
+  {re:/asset.management.policy/,                          ctrl:'A.5.9',  also:['A.5.10','A.5.11']},
+  {re:/endpoint|user.device/,                             ctrl:'A.8.1',  also:['A.6.7','A.7.9','A.8.7']},
   {re:/risk.*register/,                                   ctrl:'Clause 6.1.2', also:['Clause 6.1','Clause 6.1.3']},
   {re:/risk.*treatment|soa/,                              ctrl:'Clause 6.1.3', also:['Clause 6.1.2','Clause 6.2']},
   {re:/internal.audit/,                                   ctrl:'Clause 9.2', also:['A.5.35','Clause 9.1']},
+  {re:/master.register.*organisational/,                  ctrl:'A.5.1',  also:['A.5.9','A.5.2']},
+  {re:/awareness|security.*training/,                     ctrl:'A.6.3',  also:['Clause 7.3','A.5.4']},
+  {re:/cryptograph|encryption/,                           ctrl:'A.8.24', also:['A.5.14','A.8.5']},
+  {re:/malware|antivirus/,                                ctrl:'A.8.7',  also:['A.8.1','A.8.8']},
+  {re:/configuration.management|hardening/,               ctrl:'A.8.9',  also:['A.8.8','A.8.19','A.8.32']},
 ];
 
 function getMultiControls(docName){
   var f=(docName||'').toLowerCase().replace(/[_\-.]+/g,' ').trim();
-  var out=null;
   for(var i=0;i<MULTI_CTRL_MAP.length;i++){
     if(MULTI_CTRL_MAP[i].re.test(f)){
-      out=[MULTI_CTRL_MAP[i].ctrl].concat(MULTI_CTRL_MAP[i].also||[]);
-      break;
+      return[MULTI_CTRL_MAP[i].ctrl].concat(MULTI_CTRL_MAP[i].also||[]);
     }
   }
-  // Fallback: detectMeta en geef alleen de primaire control terug
-  if(!out){var m=detectMeta(docName);out=m.ctrl?[m.ctrl]:[];}
-  return uniqCtrls(out);
+  // Fallback: run detectMeta and return just primary ctrl
+  var m=detectMeta(docName);
+  return m.ctrl?[m.ctrl]:[];
 }
 
 function detectMeta(fn){
@@ -1536,15 +1520,11 @@ function renderDomainsTab(c){
 
   // ── INBOX ────────────────────────────────────────────────────────
   if(c.inbox.length){
-    var _rec=c.inbox.filter(function(d){return suggestedDomainForInbox(c,d)>=0;}).length;
     h+='<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:var(--radius);padding:14px 16px;margin-bottom:1.25rem">';
     h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
     h+='<div><div style="font-size:13px;font-weight:600;color:#92400E">&#128228; Inbox — '+c.inbox.length+' document'+(c.inbox.length!==1?'en':'')+' wachten op indeling</div>';
     h+='<div style="font-size:11px;color:#B45309;margin-top:2px">Sleep documenten naar een domein hieronder, of klik het map-icoon om te verplaatsen.</div></div>';
-    h+='<div style="display:flex;align-items:center;gap:6px">';
-    if(_rec)h+='<button onclick="autoFileAllInbox()" class="btn btn-sm btn-primary" style="font-size:11px">&#10003; '+_rec+' automatisch indelen</button>';
     h+='<button onclick="clearInbox()" class="btn btn-sm" style="font-size:11px;color:#DC2626;border-color:#FCA5A5">&#x2715; Inbox leegmaken</button>';
-    h+='</div>';
     h+='</div>';
     h+='<div style="display:flex;flex-direction:column;gap:6px" id="inbox-list">';
     c.inbox.forEach(function(doc,ii){
@@ -1554,12 +1534,6 @@ function renderDomainsTab(c){
       h+='<div style="font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+doc.name+'</div>';
       if(doc.link)h+='<a href="'+doc.link+'" target="_blank" style="font-size:11px;color:var(--blue)">&#128279; Openen in SharePoint</a>';
       h+='</div>';
-      var _sdi=suggestedDomainForInbox(c,doc);
-      if(_sdi>=0){
-        var _sd=c.domains[_sdi];
-        var _pc=(Array.isArray(doc.controls)&&doc.controls.length)?doc.controls[0]:'';
-        h+='<button onclick="autoFileInbox('+ii+')" class="btn btn-sm" title="Indelen bij '+esc(_sd.name)+'" style="font-size:11px;background:#E1F5EE;color:#0F6E56;border-color:#86efac;font-weight:600;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis">&#10003; '+esc(_sd.name)+(_pc?' &middot; '+esc(_pc):'')+'</button>';
-      }
       h+='<select onchange="moveInboxToDomain('+ii+',this.value)" style="font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-family:DM Sans,sans-serif;max-width:160px">';
       h+='<option value="">&#128194; Naar domein...</option>';
       c.domains.forEach(function(dom,di){
@@ -1596,18 +1570,9 @@ function renderDomainsTab(c){
     function buildReviewRow(x){
       var doc=x.doc,di=x.di,doci=x.doci;
       var isPreparer=(myId&&doc.preparerId&&myId===doc.preparerId)||(myName&&doc.preparerName&&myName===doc.preparerName);
-      var isReviewer=(myId&&doc.reviewerId&&myId===doc.reviewerId)||(myName&&doc.reviewerName&&myName===doc.reviewerName);
-      var hasReviewer=!!(doc.reviewerId||doc.reviewerName);
-      var approveBtn;
-      if(isReviewer){
-        approveBtn='<button class="btn btn-sm" style="background:#E1F5EE;color:#0F6E56;border-color:#86efac;font-weight:600" onclick="cycleDomainDocStatus('+di+','+doci+')" title="Goedkeuren">&#10003; Goedkeuren</button>';
-      } else if(isPreparer){
-        approveBtn='<button class="btn btn-sm" title="Je bent preparer van dit document" style="opacity:.45;cursor:not-allowed" onclick="alert(\'\u26D4 Je kunt dit document niet goedkeuren omdat je als preparer bent aangewezen.\')">&#10003; Goedkeuren</button>';
-      } else if(!hasReviewer){
-        approveBtn='<button class="btn btn-sm" title="Geen reviewer aangewezen" style="opacity:.45;cursor:not-allowed" onclick="alert(\'\u26D4 Er is nog geen reviewer aangewezen voor dit document.\')">&#10003; Goedkeuren</button>';
-      } else {
-        approveBtn='<button class="btn btn-sm" title="Alleen de aangewezen reviewer kan goedkeuren" style="opacity:.45;cursor:not-allowed" onclick="alert(\'\u26D4 Alleen de aangewezen reviewer kan dit document goedkeuren.\')">&#10003; Goedkeuren</button>';
-      }
+      var approveBtn=isPreparer
+        ?'<button class="btn btn-sm" title="Je bent preparer van dit document" style="opacity:.45;cursor:not-allowed" onclick="alert(\'\u26D4 Je kunt dit document niet goedkeuren omdat je als preparer bent aangewezen.\')">&#10003; Goedkeuren</button>'
+        :'<button class="btn btn-sm" style="background:#E1F5EE;color:#0F6E56;border-color:#86efac;font-weight:600" onclick="cycleDomainDocStatus('+di+','+doci+')" title="Goedkeuren">&#10003; Goedkeuren</button>';
       var docLink=doc.link?'<a href="'+esc(doc.link)+'" target="_blank" style="font-size:11px;color:var(--blue);margin-left:6px">&#128196; openen</a>':'';
       var prepLabel=doc.preparerName?'<span style="font-size:10px;color:var(--text-muted)">&#9998; '+esc(doc.preparerName)+'</span>':'';
       var revLabel=doc.reviewerName?'<span style="font-size:10px;color:#1a6bbd">&#128065; '+esc(doc.reviewerName)+'</span>':'';
@@ -1774,6 +1739,71 @@ function delDomain(di){
   saveDB();render();
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// REVIEW-MAIL — 1 mail per klant per reviewer, reset bij 0 openstaande
+// ═══════════════════════════════════════════════════════════════════
+function reviewerEmail(reviewerId,reviewerName){
+  if(SP_USERS_CACHE&&SP_USERS_CACHE.users){
+    var u=SP_USERS_CACHE.users.find(function(u){return u.id===reviewerId||u.name===reviewerName;});
+    if(u&&u.email)return u.email;
+  }
+  return '';
+}
+
+// Aantal documenten dat bij deze klant in review staat voor deze reviewer
+function openReviewsForReviewer(c,reviewerId,reviewerName){
+  var n=0;
+  (c.domains||[]).forEach(function(dom){
+    (dom.docs||[]).forEach(function(d){
+      if(d.status!=='review')return;
+      if((reviewerId&&d.reviewerId===reviewerId)||(reviewerName&&d.reviewerName===reviewerName))n++;
+    });
+  });
+  return n;
+}
+
+// Verstuur mail via Graph namens de ingelogde consultant
+function sendReviewMail(toEmail,reviewerName,clientName){
+  if(!toEmail){console.warn('Geen e-mail voor reviewer, mail overgeslagen.');return;}
+  var fromName=AUTH.user?AUTH.user.name:'Risguard';
+  var toolkitUrl='https://toolkit-iso.github.io/Risguard-ISO-toolkit/';
+  var subject='ISO 27001 \u2013 Document(en) klaar voor review: '+clientName;
+  var body='<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;border:1px solid #E2E8F0;border-radius:10px;overflow:hidden">'
+    +'<div style="background:#0E2841;padding:20px 28px"><span style="color:#fff;font-size:20px;font-weight:700;letter-spacing:.08em">RISGUARD</span><span style="color:#7FA8D9;font-size:11px;display:block;margin-top:2px;letter-spacing:.05em">ISO 27001 Consultant Toolkit</span></div>'
+    +'<div style="padding:24px 28px;color:#0E2841">'
+    +'<p style="margin:0 0 14px">Beste '+(reviewerName?reviewerName.split(' ')[0]:'reviewer')+',</p>'
+    +'<p style="margin:0 0 14px">Er staan \u00e9\u00e9n of meer documenten klaar voor jouw review bij klant <strong>'+clientName+'</strong>.</p>'
+    +'<p style="margin:0 0 20px">Open de toolkit om de documenten te beoordelen en goed te keuren.</p>'
+    +'<a href="'+toolkitUrl+'" style="display:inline-block;background:#1F55A6;color:#fff;text-decoration:none;padding:11px 26px;border-radius:6px;font-size:14px;font-weight:600">Open de toolkit &rarr;</a>'
+    +'<p style="color:#94A3B8;font-size:12px;margin:22px 0 0">Deze melding is automatisch verstuurd door '+fromName+' via de ISO 27001 Toolkit.</p>'
+    +'</div></div>';
+  var msg={message:{subject:subject,body:{contentType:'HTML',content:body},toRecipients:[{emailAddress:{address:toEmail}}]},saveToSentItems:true};
+  graphPost('/me/sendMail',msg).then(function(r){
+    if(r&&r.error)console.warn('Mail mislukt:',r.error.message);
+    else console.log('Review-mail verstuurd naar',toEmail);
+  }).catch(function(e){console.warn('Mail mislukt:',e);});
+}
+
+// Trigger: stuur mail als dit de eerste openstaande review voor deze reviewer bij deze klant is
+function notifyReviewerIfNeeded(c,doc){
+  if(!doc.reviewerId&&!doc.reviewerName)return;
+  c.reviewMailSent=c.reviewMailSent||{};
+  var key=doc.reviewerId||doc.reviewerName;
+  if(c.reviewMailSent[key])return; // al een mail gestuurd, reviewer weet het al
+  var email=reviewerEmail(doc.reviewerId,doc.reviewerName);
+  sendReviewMail(email,doc.reviewerName,c.name);
+  c.reviewMailSent[key]=true;
+}
+
+// Reset de mail-vlag voor reviewers die 0 openstaande reviews meer hebben
+function resetMailFlagsIfEmpty(c){
+  if(!c.reviewMailSent)return;
+  Object.keys(c.reviewMailSent).forEach(function(key){
+    var open=openReviewsForReviewer(c,key,key);
+    if(open===0)delete c.reviewMailSent[key];
+  });
+}
+
 function cycleDomainDocStatus(di,doci){
   var c=clients()[ST.sel];if(!c)return;
   var doc=c.domains[di].docs[doci];
@@ -1786,21 +1816,11 @@ function cycleDomainDocStatus(di,doci){
   var _myId=AUTH.user?AUTH.user.localAccountId:'';
   var _myName=AUTH.user?AUTH.user.name:'';
 
-  // ── Goedkeuring: uitsluitend de aangewezen reviewer mag goedkeuren ─
+  // ── Blokkeer goedkeuring door de preparer van dit document ────────
   if(next==='approved'){
     var _isPreparer=(_myId&&doc.preparerId&&_myId===doc.preparerId)||(_myName&&doc.preparerName&&_myName===doc.preparerName);
-    var _hasReviewer=!!(doc.reviewerId||doc.reviewerName);
-    var _isReviewer=(_myId&&doc.reviewerId&&_myId===doc.reviewerId)||(_myName&&doc.reviewerName&&_myName===doc.reviewerName);
     if(_isPreparer){
       alert('\u26D4 Je kunt dit document niet goedkeuren omdat je als preparer bent aangewezen.\nLaat de reviewer "'+(doc.reviewerName||'reviewer')+'" het document goedkeuren.');
-      return;
-    }
-    if(!_hasReviewer){
-      alert('\u26D4 Er is nog geen reviewer aangewezen voor dit document.\nWijs eerst een reviewer aan voordat het kan worden goedgekeurd.');
-      return;
-    }
-    if(!_isReviewer){
-      alert('\u26D4 Alleen de aangewezen reviewer "'+(doc.reviewerName||'')+'" kan dit document goedkeuren.');
       return;
     }
   }
@@ -1815,6 +1835,7 @@ function cycleDomainDocStatus(di,doci){
     if(!confirm('"'+doc.name+'" instellen op In review?'))return;
     doc.reviewedAt=today(); // datum doorgestuurd naar review
     doc.reviewedBy=_myName; // wie heeft doorgestuurd
+    notifyReviewerIfNeeded(c,doc); // mail naar reviewer (1x per klant tot alles afgehandeld)
   }
 
   // ── Goedkeuren ───────────────────────────────────────────────────
@@ -1835,6 +1856,7 @@ function cycleDomainDocStatus(di,doci){
 
   doc.status=next;
   doc.date=today();
+  resetMailFlagsIfEmpty(c); // reset mail-vlag als reviewer 0 openstaande heeft
   saveDB();render();
 }
 
@@ -2011,7 +2033,6 @@ function getSoaControls(c){
     });
     c.soaControls=base;
   }
-  syncSoaFromDocs(c); // implStatus volgt automatisch de documentstatus
   return base;
 }
 
@@ -2024,34 +2045,9 @@ function saveSoaField(idx,field,val){
   if(val==='false')val=false;
   ctrls[idx][field]=val;
   if(field==='applicable'&&!val){ctrls[idx].implStatus='na';}
-  if(field==='applicable'&&val&&ctrls[idx].implStatus==='na'){ctrls[idx].implStatus='planned';ctrls[idx].implStatusManual=false;}
+  if(field==='applicable'&&val&&ctrls[idx].implStatus==='na'){ctrls[idx].implStatus='planned';}
   saveDB();
   // Full re-render so toggle, colors and progress bar all update live
-  render();
-}
-
-// Handmatige statuskeuze: markeer als override zodat de auto-sync deze
-// control voortaan niet meer overschrijft.
-function setSoaImpl(idx,val){
-  var c=clients()[ST.sel];if(!c)return;
-  var ctrls=getSoaControls(c);
-  if(!ctrls[idx])return;
-  ctrls[idx].implStatus=val;
-  ctrls[idx].implStatusManual=true;
-  saveDB();
-  render();
-}
-
-// Zet de control terug op automatisch: override opheffen en direct
-// opnieuw afleiden uit de documentstatus.
-function resetSoaImpl(idx){
-  var c=clients()[ST.sel];if(!c)return;
-  var ctrls=getSoaControls(c);
-  if(!ctrls[idx])return;
-  ctrls[idx].implStatusManual=false;
-  var derived=soaStatusFromDocs(c,ctrls[idx].id);
-  if(derived)ctrls[idx].implStatus=derived;
-  saveDB();
   render();
 }
 
@@ -2135,8 +2131,7 @@ function renderSoaTab(c){
     }
 
     h+='<tr'+(naRow?' class="na-row"':'')+'>';
-    var _dd=aDesc(ctrl.id);var _cidFull='A.'+ctrl.id;
-    h+='<td><button onclick="showControlDesc(\'annex\',\''+encodeURIComponent(_cidFull)+'\',\''+encodeURIComponent(_dd.desc||_dd.req||ctrl.name)+'\',\''+encodeURIComponent(_dd.q||'')+'\',\''+encodeURIComponent(_dd.doc||'')+'\',\''+encodeURIComponent(ctrl.name)+'\')" title="Bekijk control omschrijving" style="background:#EEF3FA;color:#1F3864;border:1px solid #C8D8EA;padding:2px 7px;border-radius:8px;font-family:DM Mono,monospace;font-size:10px;cursor:pointer;font-weight:500">'+_cidFull+'</button></td>';
+    h+='<td style="font-size:11px;color:var(--text-muted)">A.'+ctrl.id+'</td>';
     h+='<td style="font-size:12px">'+ctrl.name+'</td>';
 
     // Applicable toggle — calls saveSoaField which re-renders
@@ -2163,18 +2158,15 @@ function renderSoaTab(c){
     }
     h+='</td>';
 
-    // Status — automatisch ingevuld vanuit de documentstatus, maar handmatig aanpasbaar.
+    // Status select with colored background — options get neutral bg to prevent bleed
     if(ctrl.applicable){
       var implSty=soaImplColor(ctrl.implStatus);
       h+='<td>';
-      h+='<select style="font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;font-weight:600;padding:2px;'+implSty+'" onchange="setSoaImpl('+ri+',this.value);updateSoaImplColor(this)">';
+      h+='<select style="font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;font-weight:600;padding:2px;'+implSty+'" onchange="saveSoaField('+ri+',\'implStatus\',this.value);updateSoaImplColor(this)">';
       [['implemented','Implemented','#E1F5EE','#0F6E56'],['in_progress','In Progress','#FFF3E0','#B45309'],['planned','Planned','#EBF2FF','#1a6bbd']].forEach(function(opt){
         h+='<option value="'+opt[0]+'"'+(ctrl.implStatus===opt[0]?' selected':'')+' style="background:'+opt[2]+';color:'+opt[3]+'">'+opt[1]+'</option>';
       });
       h+='</select>';
-      if(ctrl.implStatusManual){
-        h+='<div style="font-size:9px;color:var(--text-muted);margin-top:2px">handmatig &middot; <a href="#" onclick="resetSoaImpl('+ri+');return false" style="color:#1a6bbd;text-decoration:none">&#8635; auto</a></div>';
-      }
       h+='</td>';
     } else {
       h+='<td><span style="font-size:11px;color:var(--text-muted)">N/A</span></td>';
@@ -2219,42 +2211,6 @@ function getImplDocsForControl(c, controlId){
 function getImplDocForControl(c, controlId){
   var docs=getImplDocsForControl(c,controlId);
   return docs.length?docs[0]:'';
-}
-
-// Leid SoA-implementatiestatus af van de status van gekoppelde documenten.
-// concept -> planned, in review -> in_progress, goedgekeurd -> implemented.
-// Bij meerdere documenten: alles goedgekeurd = implemented, iets in review/
-// goedgekeurd = in_progress, alles concept = planned. Geen gekoppeld document
-// -> null (status blijft handmatig instelbaar).
-function soaStatusFromDocs(c, controlId){
-  var norm=normalizeCtrlId(controlId);
-  var statuses=[];
-  (c.domains||[]).forEach(function(dom){
-    (dom.docs||[]).forEach(function(doc){
-      var ctrls=doc.controls||[];
-      var match=ctrls.some(function(cv){return cv===controlId||normalizeCtrlId(cv)===norm;})
-                ||doc.control===controlId||normalizeCtrlId(doc.control||'')===norm;
-      if(match)statuses.push(doc.status||'concept');
-    });
-  });
-  if(!statuses.length)return null; // geen gekoppeld document
-  if(statuses.every(function(s){return s==='approved';}))return 'implemented';
-  if(statuses.some(function(s){return s==='review'||s==='approved';}))return 'in_progress';
-  return 'planned'; // alle documenten staan op concept
-}
-
-// Synchroniseer implStatus van alle applicable SoA-controls met de
-// documentstatus. Uitgesloten (N/A) en handmatig overschreven controls
-// blijven ongemoeid.
-function syncSoaFromDocs(c){
-  if(!c||!c.soaControls)return false;
-  var changed=false;
-  c.soaControls.forEach(function(ctrl){
-    if(!ctrl.applicable||ctrl.implStatusManual)return;
-    var derived=soaStatusFromDocs(c,ctrl.id);
-    if(derived&&ctrl.implStatus!==derived){ctrl.implStatus=derived;changed=true;}
-  });
-  return changed;
 }
 
 // ── SoA Excel Export ────────────────────────────────────────────────
@@ -3002,6 +2958,7 @@ function bulkConceptToReview(di){
     doc.reviewedAt=today();
     doc.reviewedBy=_myName;
     doc.date=today();
+    notifyReviewerIfNeeded(c,doc); // 1 mail per reviewer per klant
   });
   saveDB();render();
 }
@@ -3040,7 +2997,7 @@ function exportStatusReport(){
     var pctD=docs.length?Math.round(aprD/docs.length*100):0;
     domainRows+='<tr><td colspan="6" style="padding:0">'
       +'<div style="background:linear-gradient(90deg,#0E2841 0%,#1F55A6 100%);padding:9px 14px;display:flex;align-items:center;justify-content:space-between">'
-      +'<div style="font-size:12px;font-weight:700;color:#fff">&#128193; '+esc(dom.name)+'</div>'
+      +'<div style="font-size:12px;font-weight:700;color:#fff">&#128193; '+dom.name+'</div>'
       +'<div style="display:flex;align-items:center;gap:10px">'
       +(docs.length?'<span style="font-size:10px;color:rgba(255,255,255,.7)">'+docs.length+' doc'+(docs.length!==1?'s':'')+'</span>':'')
       +(docs.length?'<span style="font-size:10px;color:#86efac">'+aprD+' &#10003;</span><span style="font-size:10px;color:#fdba74;margin-left:4px">'+revD+' review</span><span style="font-size:10px;color:rgba(255,255,255,.5);margin-left:4px">'+conD+' concept</span>':'')
@@ -3053,14 +3010,14 @@ function exportStatusReport(){
     }
     docs.forEach(function(d,i){
       domainRows+='<tr style="background:'+(i%2===0?'#fff':'#F8FAFC')+'">'
-        +'<td style="padding:8px 14px;font-size:12px;font-weight:500;border-bottom:1px solid #E2E8F0;color:#0E2841">'+esc(d.name)+'</td>'
-        +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'+(d.category?esc(d.category):'&mdash;')+'</td>'
-        +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0;font-family:monospace">'+(d.controls&&d.controls.length?esc(d.controls.join(', ')):(d.control?esc(d.control):'&mdash;'))+'</td>'
+        +'<td style="padding:8px 14px;font-size:12px;font-weight:500;border-bottom:1px solid #E2E8F0;color:#0E2841">'+d.name+'</td>'
+        +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'+(d.category||'&mdash;')+'</td>'
+        +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0;font-family:monospace">'+(d.controls&&d.controls.length?d.controls.join(', '):(d.control||'&mdash;'))+'</td>'
         +'<td style="padding:8px 12px;border-bottom:1px solid #E2E8F0">'+badge(d.status)+'</td>'
         +'<td style="padding:8px 12px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'
-          +(d.preparerName?'&#9998; '+esc(d.preparerName):'')
-          +(d.reviewerName?'<br><span style="color:#1F55A6">&#128065; '+esc(d.reviewerName)+'</span>':'')
-          +(d.approvedBy?'<br><span style="color:#0F6E56;font-weight:600">&#10003; '+esc(d.approvedBy)+'</span>':(!d.preparerName?'&mdash;':''))
+          +(d.preparerName?'&#9998; '+d.preparerName:'')
+          +(d.reviewerName?'<br><span style="color:#1F55A6">&#128065; '+d.reviewerName+'</span>':'')
+          +(d.approvedBy?'<br><span style="color:#0F6E56;font-weight:600">&#10003; '+d.approvedBy+'</span>':(!d.preparerName?'&mdash;':''))
           +'</td>'
         +'<td style="padding:8px 12px;font-size:11px;color:#94A3B8;border-bottom:1px solid #E2E8F0">'+(d.approvedAt?fmtDate(d.approvedAt):d.reviewedAt?'Review: '+fmtDate(d.reviewedAt):fmtDate(d.date))+'</td>'
         +'</tr>';
@@ -3076,24 +3033,24 @@ function exportStatusReport(){
       var bg=lvl==='hoog'?'#FEE2E2':lvl==='midden'?'#FFF3E0':'#E1F5EE';
       var stMap={open:'Open',in_behandeling:'In behandeling',behandeld:'Behandeld',geaccepteerd:'Geaccepteerd'};
       riskRows+='<tr>'
-        +'<td style="padding:7px 10px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0;font-family:monospace">'+esc(riskNum(r))+'</td>'
-        +'<td style="padding:7px 10px;font-size:12px;font-weight:500;border-bottom:1px solid #E2E8F0">'+esc(r.title)+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0;font-family:monospace">'+riskNum(r)+'</td>'
+        +'<td style="padding:7px 10px;font-size:12px;font-weight:500;border-bottom:1px solid #E2E8F0">'+r.title+'</td>'
         +'<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0"><span style="background:'+bg+';color:'+clr+';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">'+riskLbl(lvl)+'</span></td>'
-        +'<td style="padding:7px 10px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'+(r.owner?esc(r.owner):'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'+(r.owner||'—')+'</td>'
         +'<td style="padding:7px 10px;font-size:11px;border-bottom:1px solid #E2E8F0">'+(stMap[r.status]||'—')+'</td>'
         +'<td style="padding:7px 10px;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0">'+(r.reviewDate?fmtDate(r.reviewDate):'—')+'</td>'
         +'</tr>';
     });
   }
 
-  var html='<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8"><title>Statusrapport — '+esc(c.name)+'</title>'
+  var html='<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8"><title>Statusrapport — '+c.name+'</title>'
     +'<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;color:#0E2841;background:#F1F4F7;padding:32px}@media print{body{background:#fff;padding:0}.no-print{display:none}}</style></head><body>'
     // Header
     +'<div style="background:#0E2841;color:#fff;border-radius:10px;padding:28px 36px;margin-bottom:24px;display:flex;align-items:flex-start;justify-content:space-between">'
     +'<div><div style="font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;opacity:.7;margin-bottom:6px">Statusrapport ISO 27001</div>'
-    +'<div style="font-size:26px;font-weight:700;margin-bottom:4px">'+esc(c.name)+'</div>'
-    +(c.contact?'<div style="opacity:.8;font-size:13px">'+esc(c.contact)+'</div>':'')
-    +'<div style="margin-top:12px;font-size:12px;opacity:.7">Gegenereerd op '+fmtDate(today())+' door '+esc(AUTH.user?AUTH.user.name:'Risguard')+'</div></div>'
+    +'<div style="font-size:26px;font-weight:700;margin-bottom:4px">'+c.name+'</div>'
+    +(c.contact?'<div style="opacity:.8;font-size:13px">'+c.contact+'</div>':'')
+    +'<div style="margin-top:12px;font-size:12px;opacity:.7">Gegenereerd op '+fmtDate(today())+' door '+(AUTH.user?AUTH.user.name:'Risguard')+'</div></div>'
     +'<div style="text-align:right">'
     +(c.certDate?'<div style="background:rgba(255,255,255,.12);border-radius:8px;padding:10px 16px"><div style="font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.08em">Streefdatum certificering</div><div style="font-size:18px;font-weight:700;margin-top:2px">'+fmtDate(c.certDate)+'</div></div>':'')
     +'</div></div>'
@@ -3120,7 +3077,7 @@ function exportStatusReport(){
     +(risks.length?
       '<div style="background:#fff;border-radius:8px;margin-bottom:24px;overflow:hidden">'
       +'<div style="background:#0E2841;color:#fff;padding:14px 20px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:space-between">'
-      +'<span>⚠ Risicoregister</span><span style="font-size:11px;opacity:.8">'+risks.length+' risico\'s &nbsp;·&nbsp; <span style="color:#fca5a5">'+rHoog+' hoog</span> &nbsp;·&nbsp; <span style="color:#fdba74">'+rMid+' midden</span> &nbsp;·&nbsp; <span style="color:#86efac">'+rLaag+' laag</span> &nbsp;·&nbsp; <span style="color:#86efac">'+rTreated+' behandeld/geaccepteerd</span></span></div>'
+      +'<span>⚠ Risicoregister</span><span style="font-size:11px;opacity:.8">'+risks.length+' risico\'s &nbsp;·&nbsp; <span style="color:#fca5a5">'+rHoog+' hoog</span> &nbsp;·&nbsp; <span style="color:#fdba74">'+rMid+' midden</span> &nbsp;·&nbsp; <span style="color:#86efac">'+rLaag+' laag</span></span></div>'
       +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
       +'<thead><tr style="background:#F8FAFC"><th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #E2E8F0">Nr</th>'
       +'<th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #E2E8F0">Risico</th>'
@@ -3847,82 +3804,17 @@ function saveNewDomain(){
   saveDB();closeModal();render();
 }
 
-// Control -> domein-index voor de huidige klant. Zoekt in de (mogelijk
-// hernoemde/aangepaste) domeinen van de klant zelf; controls worden
-// genormaliseerd zodat 'A.5.1' en '5.1' / 'Clause 6.1' matchen.
-function domainIndexForControl(c, ctrlId){
-  if(!c||!ctrlId)return -1;
-  var target=normalizeCtrlId(ctrlId);
-  var doms=c.domains||[];
-  for(var i=0;i<doms.length;i++){
-    var ctrls=doms[i].controls||[];
-    for(var j=0;j<ctrls.length;j++){
-      if(normalizeCtrlId(ctrls[j])===target)return i;
-    }
-  }
-  return -1;
-}
-
-// Voorgesteld domein voor een inbox-item op basis van de primaire
-// gedetecteerde control. -1 = geen suggestie (twijfelgeval, blijft in inbox).
-function suggestedDomainForInbox(c, doc){
-  var det=Array.isArray(doc.controls)?doc.controls:(doc.control?[doc.control]:[]);
-  if(!det.length)return -1;
-  return domainIndexForControl(c, det[0]);
-}
-
-// Dedup van een controllijst, primaire control eerst.
-function uniqCtrls(arr){
-  var seen={},res=[];
-  (arr||[]).forEach(function(cv){if(!cv)return;var k=normalizeCtrlId(cv);if(!seen[k]){seen[k]=1;res.push(cv);}});
-  return res;
-}
-
-// Kern: verplaats inbox-item naar domein zonder save/render (voor bulk).
-// Domeinen zijn op ONDERWERP ingedeeld (een domein kan zowel 5.x als 8.x
-// bevatten, bv. Access management). Het document krijgt alle gedetecteerde
-// controls mee die binnen dít onderwerp-domein vallen; controls die bij een
-// ander onderwerp horen worden weggelaten. Valt terug op de primaire control.
-function _fileInboxToDomain(c, ii, di){
-  var doc=c.inbox[ii];
-  if(!doc||!c.domains[di])return false;
-  var detected=uniqCtrls(Array.isArray(doc.controls)?doc.controls:(doc.control?[doc.control]:[]));
-  var domSet=(c.domains[di].controls||[]).map(normalizeCtrlId);
-  var inDom=detected.filter(function(cv){return domSet.indexOf(normalizeCtrlId(cv))>=0;});
-  var ctrls=inDom.length?inDom:detected.slice(0,1);
-  c.domains[di].docs=c.domains[di].docs||[];
-  c.domains[di].docs.push({name:doc.name,link:doc.link||'',controls:ctrls,control:ctrls[0]||'',category:doc.category||'',status:doc.status||'concept',date:today(),note:''});
-  c.inbox.splice(ii,1);
-  if(ST.openDomains)ST.openDomains[di]=true;
-  return true;
-}
-
 function moveInboxToDomain(ii,diStr){
   if(diStr==='')return;
   var di=parseInt(diStr);
   var c=clients()[ST.sel];if(!c||!c.inbox)return;
-  if(_fileInboxToDomain(c, ii, di)){saveDB();render();}
-}
-
-// 1-klik: deel dit inbox-item in bij het voorgestelde domein.
-function autoFileInbox(ii){
-  var c=clients()[ST.sel];if(!c||!c.inbox)return;
-  var di=suggestedDomainForInbox(c, c.inbox[ii]);
-  if(di<0){alert('Geen domein herkend voor dit document. Sleep het of kies handmatig een domein.');return;}
-  if(_fileInboxToDomain(c, ii, di)){saveDB();render();}
-}
-
-// Bulk: deel alle herkende inbox-items in. Van achteren naar voren zodat de
-// splices de nog te verwerken indexen niet verschuiven.
-function autoFileAllInbox(){
-  var c=clients()[ST.sel];if(!c||!c.inbox)return;
-  var filed=0;
-  for(var i=c.inbox.length-1;i>=0;i--){
-    var di=suggestedDomainForInbox(c, c.inbox[i]);
-    if(di>=0&&_fileInboxToDomain(c, i, di))filed++;
-  }
-  if(filed){saveDB();render();}
-  else alert('Geen herkende documenten om automatisch in te delen.');
+  var doc=c.inbox[ii];
+  if(!doc)return;
+  c.domains[di].docs=c.domains[di].docs||[];
+  c.domains[di].docs.push({name:doc.name,link:doc.link||'',controls:doc.controls||[],control:doc.control||'',category:doc.category||'',status:doc.status||'concept',date:today(),note:''});
+  c.inbox.splice(ii,1);
+  if(ST.openDomains)ST.openDomains[di]=true;
+  saveDB();render();
 }
 
 function removeFromInbox(ii){
@@ -4603,13 +4495,12 @@ function importFromSharePoint(){
         var cleaned=cleanName(item.name);
         if(c.inbox.some(function(d){return d.spId===item.id||d.name===cleaned;}))return;
         var m=detectMeta(item.name);
-        var det=getMultiControls(item.name);
         c.inbox.push({
           name:cleaned,
           link:item.webUrl||'',
           category:m.cat||'',
-          control:det[0]||'',
-          controls:det,
+          control:'',
+          controls:[],
           status:'concept',
           date:today(),
           spId:item.id
