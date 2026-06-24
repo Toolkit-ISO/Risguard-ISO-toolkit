@@ -1865,6 +1865,7 @@ function delDomainDoc(di,doci){
   var doc=c.domains[di].docs[doci];
   if(!confirm('Document "'+doc.name+'" verwijderen?'))return;
   c.domains[di].docs.splice(doci,1);
+  resetMailFlagsIfEmpty(c); // reset mail-vlag als reviewer 0 openstaande heeft na verwijderen
   saveDB();render();
 }
 
