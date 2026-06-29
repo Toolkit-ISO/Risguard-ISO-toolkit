@@ -2729,6 +2729,42 @@ var RISK_LVLS=['laag','midden','hoog'];
 var RISK_TREATMENTS=[['mitigeren','Mitigeren'],['accepteren','Accepteren'],['vermijden','Vermijden'],['overdragen','Overdragen']];
 var RISK_STATUSES=[['open','Open'],['in_behandeling','In behandeling'],['behandeld','Behandeld'],['geaccepteerd','Geaccepteerd']];
 
+// Startcatalogus risicoscenario's (hulpmiddel bij clausule 6.1.2). Kans/impact bewust NIET vooraf
+// ingevuld: die zijn contextafhankelijk en worden per klant op de 3x3-matrix bepaald. Annex A = suggesties.
+var RISK_CATALOG=[
+{cat:'Fysieke schade',threat:'Brand in serverruimte/kantoor',vuln:'Ontbrekende of niet-geteste branddetectie en -blussing',gevolg:'Verlies van hardware en lokaal opgeslagen data; downtime',controls:['A.7.5','A.7.8','A.8.13']},
+{cat:'Fysieke schade',threat:'Waterschade (lekkage, overstroming)',vuln:'Apparatuur op begane grond of onder leidingen',gevolg:'Uitval en dataverlies',controls:['A.7.5','A.7.8']},
+{cat:'Fysieke schade',threat:'Diefstal van apparatuur of media',vuln:'Geen toegangscontrole, onbeheerde werkplekken',gevolg:'Verlies van vertrouwelijke data, AVG-melding',controls:['A.7.1','A.7.2','A.7.10','A.8.1']},
+{cat:'Fysieke schade',threat:'Vernieling/sabotage van apparatuur',vuln:'Zwakke fysieke beveiliging van faciliteiten',gevolg:'Beschikbaarheidsverlies',controls:['A.7.1','A.7.4']},
+{cat:'Natuurlijke gebeurtenissen',threat:'Extreem weer / storm',vuln:'Locatie zonder uitwijk of redundantie',gevolg:'Langdurige uitval primaire locatie',controls:['A.5.29','A.5.30','A.8.14']},
+{cat:'Natuurlijke gebeurtenissen',threat:'Stroomstoring door externe oorzaak',vuln:'Geen UPS/noodstroom',gevolg:'Onverwachte uitval, dataverlies bij schrijfacties',controls:['A.7.11','A.8.14']},
+{cat:'Uitval van essenti\u00eble diensten',threat:'Uitval internetverbinding/telecom',vuln:'Single point of failure in connectiviteit',gevolg:'Onbereikbaarheid diensten',controls:['A.8.14','A.5.29']},
+{cat:'Uitval van essenti\u00eble diensten',threat:'Uitval koeling/airco serverruimte',vuln:'Geen monitoring of redundante koeling',gevolg:'Hardware-uitval door oververhitting',controls:['A.7.5','A.8.14']},
+{cat:'Uitval van essenti\u00eble diensten',threat:'Uitval van een SaaS-/cloudleverancier',vuln:'Te grote afhankelijkheid, geen exit-strategie',gevolg:'Bedrijfsstilstand',controls:['A.5.22','A.5.23','A.5.30']},
+{cat:'Technische storingen',threat:'Hardwarefalen (server, storage, schijf)',vuln:'Geen redundantie, verouderde apparatuur',gevolg:'Dataverlies, downtime',controls:['A.8.13','A.8.14']},
+{cat:'Technische storingen',threat:'Softwarefout / mislukte update',vuln:'Onvoldoende test- en acceptatieprocedure',gevolg:'Verstoring productieomgeving',controls:['A.8.31','A.8.32','A.8.29']},
+{cat:'Technische storingen',threat:'Capaciteitstekort (opslag, rekenkracht)',vuln:'Geen capaciteitsmonitoring',gevolg:'Prestatieverlies, uitval',controls:['A.8.6']},
+{cat:'Technische storingen',threat:'Mislukte of onbruikbare back-up',vuln:'Back-ups niet getest op herstel',gevolg:'Geen herstel mogelijk na incident',controls:['A.8.13']},
+{cat:'Compromittering van informatie',threat:'Onderschepping van data in transit',vuln:'Onversleutelde verbindingen',gevolg:'Verlies vertrouwelijkheid',controls:['A.8.20','A.8.21','A.8.24']},
+{cat:'Compromittering van informatie',threat:'Datalek via verkeerd geadresseerde mail/bestand',vuln:'Geen DLP of classificatiebewustzijn',gevolg:'AVG-meldplicht, reputatieschade',controls:['A.5.12','A.5.13','A.8.12']},
+{cat:'Compromittering van informatie',threat:'Verlies/diefstal van laptop of telefoon',vuln:'Geen schijfversleuteling, geen MDM',gevolg:'Toegang derden tot bedrijfsdata',controls:['A.8.1','A.8.24','A.7.9']},
+{cat:'Compromittering van informatie',threat:'Onbevoegde toegang tot bestanden',vuln:'Te ruime autorisaties, geen need-to-know',gevolg:'Vertrouwelijkheidsschending',controls:['A.5.15','A.5.18','A.8.3']},
+{cat:'Compromittering van informatie',threat:'Achtergebleven data op afgevoerde media',vuln:'Geen veilige verwijderingsprocedure',gevolg:'Datalek na afvoer',controls:['A.7.10','A.7.14','A.8.10']},
+{cat:'Ongeautoriseerde acties',threat:'Malware-infectie',vuln:'Verouderde endpoints, geen anti-malware',gevolg:'Verstoring, dataverlies',controls:['A.8.7','A.8.8']},
+{cat:'Ongeautoriseerde acties',threat:'Ransomware',vuln:'Geen netwerksegmentatie, kwetsbare RDP, zwakke back-up',gevolg:'Versleuteling data, bedrijfsstilstand, afpersing',controls:['A.8.7','A.8.13','A.8.22','A.5.7']},
+{cat:'Ongeautoriseerde acties',threat:'Misbruik van rechten door beheerder',vuln:'Geen scheiding van taken, geen logging',gevolg:'Ongedetecteerd misbruik',controls:['A.5.3','A.8.2','A.8.15']},
+{cat:'Ongeautoriseerde acties',threat:'Exploitatie van bekende kwetsbaarheid',vuln:'Achterstallig patchbeheer',gevolg:'Inbraak, escalatie',controls:['A.8.8','A.8.9']},
+{cat:'Ongeautoriseerde acties',threat:'Onbevoegde toegang via internet (hacking)',vuln:'Zwakke perimeter, ontbrekende MFA',gevolg:'Inbraak, data-exfiltratie',controls:['A.8.5','A.8.20','A.8.23']},
+{cat:'Compromittering van functies / menselijk handelen',threat:'Bedieningsfout door medewerker',vuln:'Onvoldoende training, ontbrekende procedures',gevolg:'Verkeerde verwerking, dataverlies',controls:['A.6.3','A.5.37']},
+{cat:'Compromittering van functies / menselijk handelen',threat:'Phishing / social engineering',vuln:'Lage awareness, geen MFA',gevolg:'Gestolen inloggegevens, accountovername',controls:['A.6.3','A.8.5','A.8.23']},
+{cat:'Compromittering van functies / menselijk handelen',threat:'Insider threat (kwaadwillende medewerker)',vuln:'Geen logging/monitoring, te ruime toegang',gevolg:'Diefstal of sabotage van data',controls:['A.6.1','A.6.4','A.8.15','A.8.16']},
+{cat:'Compromittering van functies / menselijk handelen',threat:'Verloop / kennisverlies bij uitdiensttreding',vuln:'Geen offboarding, accounts blijven actief',gevolg:'Onbevoegde toegang na vertrek',controls:['A.6.5','A.5.11','A.8.3']},
+{cat:'Keten, leveranciers en compliance',threat:'Beveiligingsincident bij leverancier',vuln:'Geen beoordeling/afspraken met leveranciers',gevolg:'Indirect datalek, ketenrisico',controls:['A.5.19','A.5.20','A.5.21','A.5.22']},
+{cat:'Keten, leveranciers en compliance',threat:'Niet-naleving wet- en regelgeving (AVG, NIS2)',vuln:'Onvoldoende zicht op verplichtingen',gevolg:'Boetes, aansprakelijkheid',controls:['A.5.31','A.5.32','A.5.34']},
+{cat:'Keten, leveranciers en compliance',threat:'Schending intellectueel eigendom / licenties',vuln:'Geen software-/licentieoverzicht',gevolg:'Juridische claims',controls:['A.5.32','A.5.9']},
+{cat:'Keten, leveranciers en compliance',threat:'Verlies van bewijs/logging bij incident',vuln:'Geen of niet-beschermde logging',gevolg:'Geen forensisch onderzoek mogelijk',controls:['A.8.15','A.8.16','A.5.28']}
+];
+
 // 3x3 matrix Laag/Midden/Hoog (geen cijfers, conform Risguard-methodiek)
 function riskLevel(k,i){
   if(!k||!i)return '';
@@ -2789,6 +2825,7 @@ function renderRisksTab(c){
   // Acties
   h+='<div style="display:flex;flex-direction:column;gap:8px;margin-left:auto">';
   h+='<button class="btn btn-primary" onclick="openModal(\'addRisk\',null)">+ Risico toevoegen</button>';
+  h+='<button class="btn btn-sm" onclick="openModal(\'riskCatalog\',null)">&#128203; Uit startcatalogus</button>';
   h+='<button class="btn btn-sm" onclick="exportRisksCsv()">&#8659; Export risicoregister (.csv)</button>';
   h+='</div>';
   h+='</div>';
@@ -2804,7 +2841,7 @@ function renderRisksTab(c){
 
   // ── Tabel ─────────────────────────────────────────────────────────
   if(!risks.length){
-    h+='<div class="empty"><div class="empty-icon">&#9888;</div><div class="empty-title">Nog geen risico\u2019s</div><div class="empty-sub">Leg de risicobeoordeling vast (clausule 6.1.2) en koppel behandelmaatregelen aan Annex A controls (6.1.3).</div><button class="btn btn-primary" onclick="openModal(\'addRisk\',null)">+ Eerste risico toevoegen</button></div>';
+    h+='<div class="empty"><div class="empty-icon">&#9888;</div><div class="empty-title">Nog geen risico\u2019s</div><div class="empty-sub">Leg de risicobeoordeling vast (clausule 6.1.2) en koppel behandelmaatregelen aan Annex A controls (6.1.3).</div><button class="btn btn-primary" onclick="openModal(\'addRisk\',null)">+ Eerste risico toevoegen</button> <button class="btn" onclick="openModal(\'riskCatalog\',null)">&#128203; Uit startcatalogus</button></div>';
     return h;
   }
   var rows=risks.map(function(r,i){return{r:r,i:i};}).filter(function(x){
@@ -2832,8 +2869,8 @@ function renderRisksTab(c){
     if(r.reviewDate)h+='<div style="font-size:10px;color:'+(r.reviewDate<today()?'#DC2626':'var(--text-muted)')+';margin-top:2px">Review: '+fmtDate(r.reviewDate)+(r.reviewDate<today()?' \u26A0':'')+'</div>';
     h+='</td>';
     h+='<td style="font-size:12px">'+esc(r.owner||'\u2014')+'</td>';
-    h+='<td><select style="'+selSty+'" onchange="saveRiskField('+ri+',\'likelihood\',this.value)">'+RISK_LVLS.map(function(v){return '<option value="'+v+'"'+(r.likelihood===v?' selected':'')+'>'+riskLbl(v)+'</option>';}).join('')+'</select></td>';
-    h+='<td><select style="'+selSty+'" onchange="saveRiskField('+ri+',\'impact\',this.value)">'+RISK_LVLS.map(function(v){return '<option value="'+v+'"'+(r.impact===v?' selected':'')+'>'+riskLbl(v)+'</option>';}).join('')+'</select></td>';
+    h+='<td><select style="'+selSty+'" onchange="saveRiskField('+ri+',\'likelihood\',this.value)">'+'<option value=""'+(!r.likelihood?' selected':'')+'>\u2014</option>'+RISK_LVLS.map(function(v){return '<option value="'+v+'"'+(r.likelihood===v?' selected':'')+'>'+riskLbl(v)+'</option>';}).join('')+'</select></td>';
+    h+='<td><select style="'+selSty+'" onchange="saveRiskField('+ri+',\'impact\',this.value)">'+'<option value=""'+(!r.impact?' selected':'')+'>\u2014</option>'+RISK_LVLS.map(function(v){return '<option value="'+v+'"'+(r.impact===v?' selected':'')+'>'+riskLbl(v)+'</option>';}).join('')+'</select></td>';
     h+='<td>'+riskLvlBadge(lvl)+'</td>';
     h+='<td><select style="'+selSty+'" onchange="saveRiskField('+ri+',\'treatment\',this.value)">'+RISK_TREATMENTS.map(function(t){return '<option value="'+t[0]+'"'+(r.treatment===t[0]?' selected':'')+'>'+t[1]+'</option>';}).join('')+'</select></td>';
     h+='<td>'+riskLvlBadge(riskResLevel(r))+'</td>';
@@ -2886,6 +2923,28 @@ function saveRisk(ei){
     return s;
   }).filter(Boolean);
   if(!isE)c.risks.push(r);
+  saveDB();closeModal();render();
+}
+
+function addRisksFromCatalog(){
+  var c=clients()[ST.sel];if(!c)return;
+  c.risks=c.risks||[];
+  var boxes=document.querySelectorAll('input.rcat-chk:checked');
+  if(!boxes.length){alert('Selecteer minimaal \u00e9\u00e9n scenario.');return;}
+  var maxNum=c.risks.reduce(function(m,x){return Math.max(m,x.num||0);},0);
+  Array.prototype.forEach.call(boxes,function(b){
+    var sc=RISK_CATALOG[parseInt(b.getAttribute('data-idx'),10)];
+    if(!sc)return;
+    maxNum++;
+    c.risks.push({
+      num:maxNum,date:today(),title:sc.threat,
+      desc:'Kwetsbaarheid: '+sc.vuln+'\nMogelijk gevolg: '+sc.gevolg,
+      owner:'',reviewDate:'',likelihood:'',impact:'',
+      treatment:'mitigeren',status:'open',plan:'',
+      resLikelihood:'',resImpact:'',controls:sc.controls.slice(),
+      catRef:sc.threat
+    });
+  });
   saveDB();closeModal();render();
 }
 
@@ -3559,6 +3618,29 @@ function renderModal(){
       '<div class="field"><label>Behandelplan</label><textarea id="m-rp" rows="2" placeholder="Welke maatregelen, door wie, wanneer?">'+esc(rr.plan||'')+'</textarea></div>'+
       '<div class="field-row"><div class="field"><label>Restkans (na behandeling)</label><select id="m-rrk">'+lvlOpts(rr.resLikelihood,true)+'</select></div><div class="field"><label>Restimpact (na behandeling)</label><select id="m-rri">'+lvlOpts(rr.resImpact,true)+'</select></div></div>'+
       '<div class="modal-actions"><button class="btn" onclick="closeModal()">Annuleer</button><button class="btn btn-primary" onclick="saveRisk('+(isER?rei:'null')+')">'+(isER?'&#10003; Opslaan':'Toevoegen')+'</button></div></div></div>';
+
+  } else if(ST.modal==='riskCatalog'){
+    var rc=clients()[ST.sel]||{};
+    var existing={};(rc.risks||[]).forEach(function(r){if(r.catRef)existing[r.catRef]=true;});
+    var groups={},order=[];
+    RISK_CATALOG.forEach(function(sc,idx){if(!groups[sc.cat]){groups[sc.cat]=[];order.push(sc.cat);}groups[sc.cat].push({sc:sc,idx:idx});});
+    var body='';
+    order.forEach(function(cat){
+      body+='<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 6px">'+esc(cat)+'</div>';
+      groups[cat].forEach(function(o){
+        var sc=o.sc,added=existing[sc.threat];
+        var chips=sc.controls.map(function(cv){return '<span style="display:inline-block;background:#EBF2FF;color:#1a6bbd;border-radius:4px;padding:0 5px;margin:1px 2px 0 0;font-size:10px;white-space:nowrap">'+cv+'</span>';}).join('');
+        body+='<label style="display:flex;gap:8px;padding:7px 8px;border:1px solid var(--border);border-radius:6px;margin-bottom:5px;cursor:'+(added?'default':'pointer')+';opacity:'+(added?'.55':'1')+'">'
+          +'<input type="checkbox" class="rcat-chk" data-idx="'+o.idx+'"'+(added?' disabled':'')+' style="margin-top:2px" />'
+          +'<div style="flex:1"><div style="font-size:12px;font-weight:600;color:var(--text)">'+esc(sc.threat)+(added?' <span style="font-weight:400;color:var(--text-muted)">(al toegevoegd)</span>':'')+'</div>'
+          +'<div style="font-size:11px;color:var(--text-muted);margin-top:1px">'+esc(sc.vuln)+' &rarr; '+esc(sc.gevolg)+'</div>'
+          +(chips?'<div style="margin-top:3px">'+chips+'</div>':'')+'</div></label>';
+      });
+    });
+    root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:640px;max-height:86vh;display:flex;flex-direction:column"><div class="modal-title">Risico\u2019s uit startcatalogus</div>'
+      +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Selecteer de scenario\u2019s die op deze klant van toepassing zijn. Kans en impact worden bewust niet vooraf ingevuld \u2014 scoor die per klant op de matrix (clausule 6.1.2). De gekoppelde Annex A-controls zijn suggesties voor de risicobehandeling/SoA.</div>'
+      +'<div style="overflow:auto;flex:1;padding-right:4px;margin-bottom:4px">'+body+'</div>'
+      +'<div class="modal-actions"><button class="btn" onclick="closeModal()">Annuleer</button><button class="btn btn-primary" onclick="addRisksFromCatalog()">Geselecteerde toevoegen</button></div></div></div>';
 
   } else if(ST.modal==='importDocs'){
     var spErr=ST._spImportError||'';
