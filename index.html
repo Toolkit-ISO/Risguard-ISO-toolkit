@@ -861,13 +861,16 @@ function saveLocalOnly(){
 function saveDB(){
   localStorage.setItem('rg_v7',JSON.stringify(DB));
   if(SP_SYNC.online&&AUTH.user){
+    // Snapshot de bekende versie OP DIT MOMENT, vóór de async chain.
+    // Zo vergelijken we altijd met dezelfde baseline, ook als de achtergrondpoll
+    // ondertussen lastVersion bijwerkt (wat valse conflicten veroorzaakte).
+    var knownVersion=SP_SYNC.lastVersion;
     SP_SYNC.syncing=true;
     spGetRemoteVersion().then(function(remoteTs){
-      // Alleen een echte conflictmelding tonen als het tijdsverschil meer dan 30 seconden is.
-      // Kleinere verschillen zijn poll-ruis (de achtergrondpoll werkt elk 10 seconden).
-      // Geen conflictcheck als we zelf aan het polled zijn, of als lastVersion leeg is
-      if(remoteTs&&SP_SYNC.lastVersion&&SP_SYNC.lastVersion!==''&&!SP_SYNC.polling&&remoteTs!==SP_SYNC.lastVersion){
-        var diffSec=Math.abs(new Date(remoteTs).getTime()-new Date(SP_SYNC.lastVersion).getTime())/1000;
+      // Conflictcheck: remote is NIEUWER dan wat wij kenden bij aanvang van deze save.
+      // Geen check als knownVersion leeg is (eerste save) of remote gelijk is.
+      if(remoteTs&&knownVersion&&knownVersion!==''&&remoteTs!==knownVersion){
+        var diffSec=Math.abs(new Date(remoteTs).getTime()-new Date(knownVersion).getTime())/1000;
         if(diffSec>30){
           var keepMine=confirm('\u26A0 Conflict: een collega heeft intussen wijzigingen opgeslagen.\n\nOK \u2014 jouw versie opslaan (de recente wijzigingen van je collega worden overschreven)\nAnnuleren \u2014 versie van je collega laden (jouw laatste wijziging gaat verloren)');
           if(!keepMine){
@@ -880,7 +883,8 @@ function saveDB(){
             });
           }
         } else {
-          // Klein verschil: poll-ruis, versie bijwerken zonder melding
+          // Klein verschil (<=30s): onze eigen recente write of normale poll-ruis.
+          // Versie bijwerken zonder melding, gewoon doorgaan.
           SP_SYNC.lastVersion=remoteTs;
         }
       }
