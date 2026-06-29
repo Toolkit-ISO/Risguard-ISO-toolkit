@@ -2853,7 +2853,7 @@ function renderRisksTab(c){
     h+='<div class="empty"><div class="empty-icon">&#128269;</div><div class="empty-title">Geen resultaten</div></div>';
     return h;
   }
-  var selSty='font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);padding:2px';
+  var selSty='font-size:11px;width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);padding:2px 20px 2px 4px;appearance:auto;-webkit-appearance:auto';
   h+='<div class="tbl-wrap"><table style="table-layout:fixed"><colgroup><col style="width:44px"><col><col style="width:120px"><col style="width:78px"><col style="width:78px"><col style="width:74px"><col style="width:100px"><col style="width:74px"><col style="width:118px"><col style="width:56px"></colgroup>';
   h+='<thead><tr><th>Nr</th><th>Risico</th><th>Eigenaar</th><th>Kans</th><th>Impact</th><th>Niveau</th><th>Behandeling</th><th>Restniveau</th><th>Status</th><th></th></tr></thead><tbody>';
   rows.forEach(function(x){
