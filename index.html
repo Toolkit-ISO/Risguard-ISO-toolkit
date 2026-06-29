@@ -254,6 +254,13 @@ tbody tr:hover td{background:#F7FAFD;}
 .na-row td{opacity:.45;}
 .divider{border:none;border-top:1px solid var(--border);margin:1.25rem 0;}
 </style>
+<!-- Libraries voor tekstextractie uit geuploade documenten (bulk audit-beoordeling) -->
+<!-- fflate: uitpakken van docx/xlsx (ZIP). pdf.js: tekst uit pdf. Beide via cdnjs. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fflate/0.8.2/umd/index.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+if(window.pdfjsLib){window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}
+</script>
 </head>
 <body>
 
@@ -3189,7 +3196,7 @@ function renderAuditDetail(c){
   var ap2=c.auditPlan||{};
   var ipeople=ap2.interviewees_list||[];
   h+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:1.25rem;box-shadow:var(--sh)">';
-  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">Auditplan</div></div>';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">Auditplan</div><button class="btn btn-sm" onclick="openModal(\'bulkAudit\')" title="Lees documenten in en laat ze per norm beoordelen">\u{1F4C4} Documenten inlezen</button></div>';
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
   h+='<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Auditdatum</div><input type="date" value="'+(ap2.date||'')+'" onchange="saveAuditPlan(\'date\',this.value)" style="width:100%;font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-family:DM Sans,sans-serif" /></div>';
   h+='<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Auditor</div><input type="text" value="'+(ap2.auditor||'')+'" onchange="saveAuditPlan(\'auditor\',this.value)" placeholder="Naam auditor" style="width:100%;font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-family:DM Sans,sans-serif" /></div>';
@@ -3410,7 +3417,7 @@ function renderAuditDetail(c){
   var ap2=c.auditPlan||{};
   var ipeople=ap2.interviewees_list||[];
   h+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:1.25rem;box-shadow:var(--sh)">';
-  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">Auditplan</div></div>';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">Auditplan</div><button class="btn btn-sm" onclick="openModal(\'bulkAudit\')" title="Lees documenten in en laat ze per norm beoordelen">\u{1F4C4} Documenten inlezen</button></div>';
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
   h+='<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Auditdatum</div><input type="date" value="'+(ap2.date||'')+'" onchange="saveAuditPlan(\'date\',this.value)" style="width:100%;font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-family:DM Sans,sans-serif" /></div>';
   h+='<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Auditor</div><input type="text" value="'+(ap2.auditor||'')+'" onchange="saveAuditPlan(\'auditor\',this.value)" placeholder="Naam auditor" style="width:100%;font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-family:DM Sans,sans-serif" /></div>';
@@ -3839,6 +3846,45 @@ function renderModal(){
       '<div class="field"><label>Link (optioneel)</label><input id="sd-link" placeholder="https://sharepoint.com/... of lokaal pad" /></div>'+
       '<div class="field"><label>Type document</label><select id="sd-type"><option value="">— Vrij</option><option>Scope Statement</option><option>Statement of Applicability (SoA)</option><option>Risicobeleid</option><option>Risicobeoordeling</option><option>Risicobehandelingsplan</option><option>ISMS Framework</option><option>Continuiteitsplan</option><option>Overig</option></select></div>'+
       '<div class="modal-actions"><button class="btn" onclick="closeModal()">Annuleer</button><button class="btn btn-primary" onclick="saveScopeDoc('+ci2+')">+ Koppelen</button></div></div></div>';
+
+  } else if(ST.modal==='bulkAudit'){
+    var c=clients()[ST.sel];
+    var docs=(c&&c.auditDocs)||[];
+    var inboxCount=(c&&c.inbox)?c.inbox.length:0;
+    var busy=ST._bulkBusy;
+    var prog=ST._bulkProg||'';
+    var dh='';
+    if(docs.length){
+      dh+='<div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 6px">Verwerkte documenten ('+docs.length+')</div>';
+      dh+='<div style="display:flex;flex-direction:column;gap:5px;max-height:240px;overflow:auto">';
+      docs.forEach(function(d,di){
+        var ic=d.ok?'#0F6E56':'#DC2626';
+        var sub=d.ok?(d.chars.toLocaleString('nl-NL')+' tekens'+(d.truncated?' (ingekort)':'')):(d.err||'fout');
+        var srcLbl=d.source==='sp'?'SharePoint':'lokaal';
+        dh+='<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--white);border:1px solid var(--border);border-radius:8px">';
+        dh+='<div style="color:'+ic+';font-size:14px">'+(d.ok?'\u2713':'\u2715')+'</div>';
+        dh+='<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+d.name+'</div><div style="font-size:10px;color:var(--text-muted)">'+srcLbl+' \u00b7 '+sub+'</div></div>';
+        dh+='<button onclick="removeAuditDoc('+di+')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:13px;padding:2px 6px" title="Verwijderen">\u2715</button>';
+        dh+='</div>';
+      });
+      dh+='</div>';
+      var okCount=docs.filter(function(d){return d.ok;}).length;
+      dh+='<div style="font-size:11px;color:var(--text-muted);margin-top:8px">'+okCount+' van '+docs.length+' succesvol uitgelezen. Tekst staat klaar voor de volgende stap (matchen + AI-beoordeling).</div>';
+    }
+    root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:600px;max-height:88vh;display:flex;flex-direction:column">'+
+      '<div class="modal-title">\u{1F4C4} Documenten inlezen voor audit</div>'+
+      '<div style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">Lees documenten in zodat de toolkit ze per norm kan beoordelen. Ondersteund: <strong>.docx, .xlsx, .pdf</strong>. De tekst blijft in je browser tot je in een volgende stap akkoord geeft voor AI-beoordeling.</div>'+
+      '<div id="bulk-dropzone" ondragover="event.preventDefault();this.style.borderColor=\'#1F3864\';this.style.background=\'#EEF3FA\'" ondragleave="this.style.borderColor=\'var(--border)\';this.style.background=\'var(--surface)\'" ondrop="bulkDrop(event)" onclick="document.getElementById(\'bulk-file-input\').click()" style="border:2px dashed var(--border);border-radius:10px;padding:1.5rem;text-align:center;cursor:pointer;background:var(--surface);transition:.15s">'+
+        '<div style="font-size:26px;margin-bottom:6px">\u{1F4C1}</div>'+
+        '<div style="font-size:13px;font-weight:500;color:var(--text)">Sleep bestanden hierheen of klik om te kiezen</div>'+
+        '<div style="font-size:11px;color:var(--text-muted);margin-top:3px">Meerdere bestanden tegelijk mogelijk</div>'+
+      '</div>'+
+      '<input type="file" id="bulk-file-input" multiple accept=".docx,.xlsx,.pdf" style="display:none" onchange="bulkLocalFiles(this.files)" />'+
+      (inboxCount?'<button class="btn btn-sm" style="margin-top:10px;align-self:flex-start" onclick="bulkFromInbox()">\u{1F4E5} '+inboxCount+' document'+(inboxCount!==1?'en':'')+' uit inbox/SharePoint inlezen</button>':'')+
+      (busy?'<div style="text-align:center;padding:1rem;font-size:13px;color:var(--text-muted)">\u231B '+(prog||'Bezig met inlezen\u2026')+'</div>':'')+
+      dh+
+      '<div class="modal-actions" style="margin-top:14px"><button class="btn" onclick="closeModal()">Sluiten</button>'+(docs.filter(function(d){return d.ok;}).length?'<button class="btn btn-primary" onclick="alert(\'Volgende stap (matchen + AI) wordt in de volgende fase gebouwd.\')">Volgende: beoordelen \u2192</button>':'')+'</div>'+
+    '</div></div>';
   }
 }
 
@@ -3980,7 +4026,7 @@ function showControlDesc(type,cid,reqEnc,qEnc,docEnc,nameEnc){
   var docBlock=doc?'<div class="field"><label>Verwacht document</label><div class="desc-box doc-box">'+nl(doc)+'</div></div>':'';
   root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-title">'+xe(cid)+' &mdash; '+xe(name)+'</div><div class="field"><label>'+(type==='clause'?'Vereiste (ISO 27001:2022)':'Control omschrijving')+'</label><div class="desc-box">'+nl(req)+'</div></div>'+qBlock+docBlock+'<div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">Sluiten</button></div></div></div>';
 }
-function closeModal(){ST.modal=null;ST.mdata=null;ST._ddShowAll=null;renderModal();}
+function closeModal(){ST.modal=null;ST.mdata=null;ST._ddShowAll=null;ST._bulkBusy=false;ST._bulkProg='';renderModal();}
 function setTab(t){if(t==='phases'||t==='docs')t='domains';ST.tab=t;ST.search='';ST.fSt='';ST.fCat='';ST.riskF='all';ST.riskFSt='';ST.expandedPhase=null;render();}
 function setAuditTab(t){ST.auditTab=t;render();}
 function togglePhase(pi){ST.expandedPhase=ST.expandedPhase===pi?null:pi;render();}
@@ -4519,6 +4565,226 @@ function fetchFolderChildren(ref){
 }
 
 // Recursief alle bestanden ophalen uit map én submappen (max 3 lagen diep)
+// ═══════════════════════════════════════════
+// TEKSTEXTRACTIE — bulk audit-document analyse (laag 1)
+// Eén pad voor lokale uploads én SharePoint-downloads: input is altijd een ArrayBuffer.
+// docx/xlsx via fflate (unzip), pdf via pdf.js. Geen externe data verlaat de browser hier.
+// ═══════════════════════════════════════════
+
+// XML-tags strippen en whitespace normaliseren
+function _stripXml(xml){
+  return String(xml)
+    .replace(/<[^>]+>/g,' ')
+    .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')
+    .replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#\d+;/g,' ')
+    .replace(/\s+/g,' ').trim();
+}
+
+// docx: word/document.xml uitpakken. Paragraaf-einden (</w:p>) worden newlines.
+function _extractDocx(u8){
+  var files=window.fflate.unzipSync(u8);
+  var docXml=files['word/document.xml'];
+  if(!docXml)throw new Error('Geen word/document.xml in docx');
+  var xml=window.fflate.strFromU8(docXml);
+  // paragraaf- en regeleindes behouden voor leesbaarheid
+  xml=xml.replace(/<\/w:p>/g,'\n').replace(/<w:br\s*\/?>/g,'\n');
+  return _stripXml(xml);
+}
+
+// xlsx: sharedStrings + alle sheets. Cellen gescheiden door spaties, rijen door newlines.
+function _extractXlsx(u8){
+  var files=window.fflate.unzipSync(u8);
+  var shared=[];
+  if(files['xl/sharedStrings.xml']){
+    var ssXml=window.fflate.strFromU8(files['xl/sharedStrings.xml']);
+    var siMatches=ssXml.match(/<si[\s>][\s\S]*?<\/si>/g)||[];
+    shared=siMatches.map(function(si){return _stripXml(si);});
+  }
+  var out=[];
+  Object.keys(files).forEach(function(name){
+    if(!/^xl\/worksheets\/sheet\d+\.xml$/.test(name))return;
+    var sheetXml=window.fflate.strFromU8(files[name]);
+    var rows=sheetXml.match(/<row[\s>][\s\S]*?<\/row>/g)||[];
+    rows.forEach(function(row){
+      var cells=row.match(/<c[\s>][\s\S]*?<\/c>/g)||[];
+      var rowVals=[];
+      cells.forEach(function(cell){
+        var isShared=/t="s"/.test(cell);
+        var vm=cell.match(/<v>([\s\S]*?)<\/v>/);
+        if(!vm)return;
+        var val=vm[1];
+        if(isShared){var idx=parseInt(val,10);val=shared[idx]!=null?shared[idx]:'';}
+        else{val=_stripXml(val);}
+        if(val)rowVals.push(val);
+      });
+      if(rowVals.length)out.push(rowVals.join(' \u2502 '));
+    });
+  });
+  return out.join('\n');
+}
+
+// pdf via pdf.js: alle pagina's, tekst per pagina samengevoegd.
+function _extractPdf(u8){
+  if(!window.pdfjsLib)throw new Error('pdf.js niet geladen');
+  return window.pdfjsLib.getDocument({data:u8}).promise.then(function(pdf){
+    var pages=[];
+    var seq=Promise.resolve();
+    for(var i=1;i<=pdf.numPages;i++){
+      (function(pageNum){
+        seq=seq.then(function(){
+          return pdf.getPage(pageNum).then(function(page){
+            return page.getTextContent().then(function(tc){
+              var txt=tc.items.map(function(it){return it.str;}).join(' ');
+              pages.push(txt);
+            });
+          });
+        });
+      })(i);
+    }
+    return seq.then(function(){return pages.join('\n\n').replace(/\s+/g,' ').trim();});
+  });
+}
+
+// Hoofdfunctie: kies extractor op extensie. Retourneert altijd een Promise<string>.
+// Begrenst output op ~12000 tekens zodat de latere AI-call niet ontploft.
+function extractDocText(filename, arrayBuffer){
+  var ext=(String(filename).match(/\.([^.]+)$/)||['',''])[1].toLowerCase();
+  var u8=new Uint8Array(arrayBuffer);
+  return new Promise(function(resolve){
+    try{
+      if(ext==='pdf'){
+        _extractPdf(u8).then(function(t){resolve({text:t,ok:true});}).catch(function(e){resolve({text:'',ok:false,err:e.message});});
+        return;
+      }
+      var text='';
+      if(ext==='docx')text=_extractDocx(u8);
+      else if(ext==='xlsx')text=_extractXlsx(u8);
+      else if(ext==='doc'||ext==='xls'){resolve({text:'',ok:false,err:'Oud Office-formaat (.doc/.xls) wordt niet ondersteund \u2014 sla op als .docx/.xlsx'});return;}
+      else {resolve({text:'',ok:false,err:'Bestandstype .'+ext+' wordt niet ondersteund'});return;}
+      resolve({text:text,ok:true});
+    }catch(e){
+      resolve({text:'',ok:false,err:e.message||'Onbekende extractiefout'});
+    }
+  }).then(function(res){
+    if(res.text&&res.text.length>12000){res.text=res.text.slice(0,12000)+'\n\n[\u2026 ingekort, document langer dan 12.000 tekens]';res.truncated=true;}
+    res.chars=res.text?res.text.length:0;
+    return res;
+  });
+}
+
+// SharePoint-bestand als ArrayBuffer ophalen via Graph (driveId+itemId of download-URL)
+function fetchSpFileBytes(driveId,itemId){
+  return acquireToken().then(function(token){
+    return fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/items/'+itemId+'/content',{
+      headers:{Authorization:'Bearer '+token}
+    }).then(function(r){
+      if(!r.ok)throw new Error('Download mislukt ('+r.status+')');
+      return r.arrayBuffer();
+    });
+  });
+}
+
+// ── Bulk-upload verwerkingslogica (laag 1) ──────────────────────────
+// Geëxtraheerde tekst wordt opgeslagen in c.auditDocs[] (auditspecifiek, los van c.inbox).
+// Elk item: {name, source:'local'|'sp', ext, ok, text, chars, truncated?, err?, spId?, link?}
+
+function _ensureAuditDocs(){
+  var c=clients()[ST.sel];
+  if(!c)return null;
+  if(!c.auditDocs)c.auditDocs=[];
+  return c;
+}
+
+// Lokale bestanden (van file-input of drag&drop) inlezen
+function bulkLocalFiles(fileList){
+  var files=Array.prototype.slice.call(fileList||[]);
+  if(!files.length)return;
+  var c=_ensureAuditDocs();if(!c)return;
+  ST._bulkBusy=true;ST._bulkProg='0 van '+files.length+' ingelezen';renderModal();
+  var done=0;
+  var seq=Promise.resolve();
+  files.forEach(function(file){
+    seq=seq.then(function(){
+      return file.arrayBuffer().then(function(buf){
+        return extractDocText(file.name,buf).then(function(res){
+          c.auditDocs.push({
+            name:cleanName(file.name),
+            rawName:file.name,
+            source:'local',
+            ext:(file.name.match(/\.([^.]+)$/)||['',''])[1].toLowerCase(),
+            ok:res.ok,text:res.text||'',chars:res.chars||0,truncated:!!res.truncated,err:res.err||''
+          });
+          done++;ST._bulkProg=done+' van '+files.length+' ingelezen';renderModal();
+        });
+      });
+    });
+  });
+  seq.then(function(){
+    ST._bulkBusy=false;ST._bulkProg='';saveDB();renderModal();
+  }).catch(function(e){
+    ST._bulkBusy=false;ST._bulkProg='';renderModal();
+    alert('Fout bij inlezen: '+(e.message||e));
+  });
+}
+
+// Drag & drop handler
+function bulkDrop(e){
+  e.preventDefault();
+  var dz=document.getElementById('bulk-dropzone');
+  if(dz){dz.style.borderColor='var(--border)';dz.style.background='var(--surface)';}
+  if(e.dataTransfer&&e.dataTransfer.files)bulkLocalFiles(e.dataTransfer.files);
+}
+
+// Documenten uit de bestaande inbox (SharePoint) inlezen: download bytes via Graph
+function bulkFromInbox(){
+  var c=_ensureAuditDocs();if(!c||!c.inbox||!c.inbox.length)return;
+  if(!AUTH.token){alert('Niet ingelogd. Log eerst in met Microsoft om SharePoint-bestanden in te lezen.');return;}
+  // Resolve driveId eenmalig: inbox-items hebben spId maar geen driveId opgeslagen.
+  // We gebruiken de webUrl→Graph shares-API per bestand zou te traag zijn; in plaats daarvan
+  // halen we de driveId uit de eerste succesvolle resolve van de klant-rootmap als die bekend is.
+  var items=c.inbox.filter(function(d){
+    var ext=(String(d.name).match(/\.([^.]+)$/)||['',''])[1].toLowerCase();
+    // inbox-namen zijn al "cleaned" (zonder extensie) — gebruik daarom rawName indien aanwezig
+    return true;
+  });
+  if(!items.length)return;
+  ST._bulkBusy=true;ST._bulkProg='SharePoint-bestanden ophalen\u2026';renderModal();
+  var done=0;var total=items.length;
+  var seq=Promise.resolve();
+  items.forEach(function(d){
+    seq=seq.then(function(){
+      // spId bij inbox-items is een driveItem-id; we hebben de driveId nodig.
+      // Graph laat toe een item op te halen via /shares of via het bekende drive-pad.
+      // Eenvoudigste robuuste route: gebruik de download-URL die we via /items/{id} kunnen krijgen.
+      if(!d.spId||!d._driveId){
+        // Geen driveId bekend → markeer als overslaan met duidelijke melding
+        c.auditDocs.push({name:d.name,source:'sp',ok:false,text:'',chars:0,err:'driveId onbekend \u2014 lees opnieuw in via SharePoint-import'});
+        done++;ST._bulkProg=done+' van '+total+' verwerkt';renderModal();
+        return;
+      }
+      return fetchSpFileBytes(d._driveId,d.spId).then(function(buf){
+        var fn=d.rawName||d.name;
+        return extractDocText(fn,buf).then(function(res){
+          c.auditDocs.push({name:d.name,rawName:d.rawName||d.name,source:'sp',spId:d.spId,link:d.link||'',
+            ext:(String(fn).match(/\.([^.]+)$/)||['',''])[1].toLowerCase(),
+            ok:res.ok,text:res.text||'',chars:res.chars||0,truncated:!!res.truncated,err:res.err||''});
+          done++;ST._bulkProg=done+' van '+total+' verwerkt';renderModal();
+        });
+      }).catch(function(e){
+        c.auditDocs.push({name:d.name,source:'sp',ok:false,text:'',chars:0,err:e.message||'downloadfout'});
+        done++;ST._bulkProg=done+' van '+total+' verwerkt';renderModal();
+      });
+    });
+  });
+  seq.then(function(){ST._bulkBusy=false;ST._bulkProg='';saveDB();renderModal();});
+}
+
+function removeAuditDoc(di){
+  var c=clients()[ST.sel];if(!c||!c.auditDocs)return;
+  c.auditDocs.splice(di,1);saveDB();renderModal();
+}
+
+
 function fetchAllFiles(driveId, itemId, depth){
   depth=depth||0;
   if(depth>3)return Promise.resolve([]);
@@ -4553,6 +4819,7 @@ function importFromSharePoint(){
 
   resolveSharePointFolder(url)
     .then(function(ref){
+      ST._spLastDriveId=ref.driveId||'';
       // Altijd recursief: haalt bestanden op uit map én alle submappen
       var rootId=ref.itemId;
       if(!rootId){
@@ -4584,13 +4851,15 @@ function importFromSharePoint(){
         var m=detectMeta(item.name);
         c.inbox.push({
           name:cleaned,
+          rawName:item.name,
           link:item.webUrl||'',
           category:m.cat||'',
           control:'',
           controls:[],
           status:'concept',
           date:today(),
-          spId:item.id
+          spId:item.id,
+          _driveId:ST._spLastDriveId||''
         });
         added++;
       });
