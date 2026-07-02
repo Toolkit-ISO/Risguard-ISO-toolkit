@@ -329,6 +329,10 @@ var MSAL_CONFIG={
   cache:{cacheLocation:'sessionStorage',storeAuthStateInCookie:false}
 };
 var GRAPH_SCOPES=['User.Read','Sites.ReadWrite.All','Files.ReadWrite.All','Mail.Send'];
+// Azure Function-proxy voor de Anthropic API (AI-beoordeling audit-module).
+// Vul in zodra de Function gedeployed is, bijv. 'https://risguard-anthropic-proxy.azurewebsites.net/api/anthropic-proxy'.
+// Leeg = AI-beoordeling toont een duidelijke melding i.p.v. te falen op een niet-bestaand endpoint.
+var ANTHROPIC_PROXY_URL='';
 var msalInstance=null;
 var AUTH={user:null,token:null,ready:false};
 
@@ -3939,6 +3943,12 @@ function renderModal(){
     if(!ST._aiStarted){
       var qb=buildAiQueue(c);
       body+='<div style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">De AI beoordeelt per norm of het kandidaat-document de ISO-eis afdekt, en vult status, bevinding en verbetersuggestie in als <strong>concept</strong> (geel gemarkeerd). Niets wordt automatisch goedgekeurd \u2014 jij loopt alle antwoorden na en bevestigt of corrigeert ze in de audittabel.</div>';
+      if(!ANTHROPIC_PROXY_URL){
+        body+='<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#92660A">\u26a0\ufe0f AI-proxy nog niet geconfigureerd. Deze stap heeft een Azure Function nodig die de Anthropic API-key server-side bewaart (overleg met Thom/Mohamed). Zodra die live is, vul je de URL in bij <code>ANTHROPIC_PROXY_URL</code> in de code.</div>';
+        body+='<div class="modal-actions" style="margin-top:14px"><button class="btn" onclick="openModal(\'bulkMatch\')">\u2190 Terug</button><button class="btn" onclick="closeModal()">Sluiten</button></div>';
+        root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:600px;max-height:88vh;display:flex;flex-direction:column;overflow:auto"><div class="modal-title">\u2728 AI-beoordeling per norm</div>'+body+'</div></div>';
+        return;
+      }
       body+='<div style="background:var(--surface);border-radius:8px;padding:12px 14px;margin-bottom:14px">';
       body+='<div style="font-size:14px;font-weight:600;color:var(--text)">'+qb.queue.length+' norm'+(qb.queue.length!==1?'en':'')+' worden beoordeeld</div>';
       body+=(qb.skipped?'<div style="font-size:12px;color:var(--text-muted);margin-top:3px">'+qb.skipped+' norm'+(qb.skipped!==1?'en':'')+' overgeslagen \u2014 al handmatig beoordeeld</div>':'');
@@ -4910,14 +4920,23 @@ function _aiBuildPrompt(type,id,name,reqText,docText){
     '- improvement: maximaal 1 zin, concrete aanbeveling. Laat leeg ("") als status compliant is en er niets te verbeteren is.';
 }
 
+// Roept de Azure Function-proxy aan (niet rechtstreeks Anthropic — dat werkt niet
+// vanuit een gehoste site zonder API-key, en een key in publieke broncode zetten is
+// een beveiligingsrisico). De proxy bewaart de Anthropic-key server-side en valideert
+// dat de aanroeper een ingelogde Risguard-gebruiker is via het bestaande AAD-token.
 function _aiCallForNorm(type,id,name,reqText,docText){
+  if(!ANTHROPIC_PROXY_URL){
+    return Promise.reject(new Error('AI-proxy nog niet geconfigureerd. Vraag Thom/Mohamed om de Azure Function te deployen en vul ANTHROPIC_PROXY_URL in de code in.'));
+  }
   var prompt=_aiBuildPrompt(type,id,name,reqText,docText);
-  return fetch('https://api.anthropic.com/v1/messages',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+  return acquireToken().then(function(aadToken){
+    return fetch(ANTHROPIC_PROXY_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+aadToken},
+      body:JSON.stringify({model:'claude-sonnet-5',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+    });
   }).then(function(r){
-    if(!r.ok)throw new Error('API-fout ('+r.status+')');
+    if(!r.ok)throw new Error('Proxy-fout ('+r.status+')');
     return r.json();
   }).then(function(data){
     var txt=(data.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('\n').trim();
