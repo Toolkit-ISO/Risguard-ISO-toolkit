@@ -3862,6 +3862,7 @@ function renderModal(){
         var ic=d.ok?'#0F6E56':'#DC2626';
         var sub=d.ok?(d.chars.toLocaleString('nl-NL')+' tekens'+(d.truncated?' (ingekort)':'')):(d.err||'fout');
         var srcLbl=d.source==='sp'?'SharePoint':'lokaal';
+        if(d.fromZip)srcLbl+=' \u00b7 uit '+d.fromZip+'.zip';
         dh+='<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--white);border:1px solid var(--border);border-radius:8px">';
         dh+='<div style="color:'+ic+';font-size:14px">'+(d.ok?'\u2713':'\u2715')+'</div>';
         dh+='<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+d.name+'</div><div style="font-size:10px;color:var(--text-muted)">'+srcLbl+' \u00b7 '+sub+'</div></div>';
@@ -3874,13 +3875,13 @@ function renderModal(){
     }
     root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:600px;max-height:88vh;display:flex;flex-direction:column">'+
       '<div class="modal-title">\u{1F4C4} Documenten inlezen voor audit</div>'+
-      '<div style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">Lees documenten in zodat de toolkit ze per norm kan beoordelen. Ondersteund: <strong>.docx, .xlsx, .pdf</strong>. De tekst blijft in je browser tot je in een volgende stap akkoord geeft voor AI-beoordeling.</div>'+
+      '<div style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">Lees documenten in zodat de toolkit ze per norm kan beoordelen. Ondersteund: <strong>.docx, .xlsx, .pdf</strong> en <strong>.zip</strong> (wordt automatisch uitgepakt — handig voor een map die je uit Teams/OneDrive downloadt). De tekst blijft in je browser tot je in een volgende stap akkoord geeft voor AI-beoordeling.</div>'+
       '<div id="bulk-dropzone" ondragover="event.preventDefault();this.style.borderColor=\'#1F3864\';this.style.background=\'#EEF3FA\'" ondragleave="this.style.borderColor=\'var(--border)\';this.style.background=\'var(--surface)\'" ondrop="bulkDrop(event)" onclick="document.getElementById(\'bulk-file-input\').click()" style="border:2px dashed var(--border);border-radius:10px;padding:1.5rem;text-align:center;cursor:pointer;background:var(--surface);transition:.15s">'+
         '<div style="font-size:26px;margin-bottom:6px">\u{1F4C1}</div>'+
         '<div style="font-size:13px;font-weight:500;color:var(--text)">Sleep bestanden hierheen of klik om te kiezen</div>'+
         '<div style="font-size:11px;color:var(--text-muted);margin-top:3px">Meerdere bestanden tegelijk mogelijk</div>'+
       '</div>'+
-      '<input type="file" id="bulk-file-input" multiple accept=".docx,.xlsx,.pdf" style="display:none" onchange="bulkLocalFiles(this.files)" />'+
+      '<input type="file" id="bulk-file-input" multiple accept=".docx,.xlsx,.pdf,.zip" style="display:none" onchange="bulkLocalFiles(this.files)" />'+
       (inboxCount?'<button class="btn btn-sm" style="margin-top:10px;align-self:flex-start" onclick="bulkFromInbox()">\u{1F4E5} '+inboxCount+' document'+(inboxCount!==1?'en':'')+' uit inbox/SharePoint inlezen</button>':'')+
       (busy?'<div style="text-align:center;padding:1rem;font-size:13px;color:var(--text-muted)">\u231B '+(prog||'Bezig met inlezen\u2026')+'</div>':'')+
       dh+
@@ -4726,25 +4727,88 @@ function _ensureAuditDocs(){
 }
 
 // Lokale bestanden (van file-input of drag&drop) inlezen
+// Zip uitpakken en de relevante documenten (docx/xlsx/pdf) eruit halen.
+// Geeft een array {name, buffer} terug. Mapstructuur in de zip wordt platgeslagen.
+// Systeembestanden (__MACOSX, verborgen, Thumbs.db) worden overgeslagen.
+function _extractZipEntries(u8){
+  var files=window.fflate.unzipSync(u8);
+  var out=[];
+  Object.keys(files).forEach(function(path){
+    var base=path.split('/').pop();
+    if(!base)return; // map-entry
+    if(/^__MACOSX/.test(path)||/^\./.test(base)||base==='Thumbs.db'||base==='.DS_Store')return;
+    var ext=(base.match(/\.([^.]+)$/)||['',''])[1].toLowerCase();
+    if(['docx','xlsx','pdf'].indexOf(ext)===-1)return; // alleen wat we kunnen lezen
+    out.push({name:base,buffer:files[path].buffer.slice(files[path].byteOffset,files[path].byteOffset+files[path].byteLength)});
+  });
+  return out;
+}
+
+// Eén ArrayBuffer verwerken en 0..n auditDocs-items toevoegen.
+// - .zip → uitpakken, elk bestand erin apart verwerken (bron blijft behouden, met zip-naam als prefix).
+// - anders → normale extractie via extractDocText.
+// Retourneert een Promise die het aantal toegevoegde documenten teruggeeft.
+function _processBuffer(filename, buffer, source, extra){
+  var c=clients()[ST.sel];if(!c)return Promise.resolve(0);
+  if(!c.auditDocs)c.auditDocs=[];
+  extra=extra||{};
+  var ext=(String(filename).match(/\.([^.]+)$/)||['',''])[1].toLowerCase();
+  if(ext==='zip'){
+    var entries;
+    try{ entries=_extractZipEntries(new Uint8Array(buffer)); }
+    catch(e){
+      c.auditDocs.push(Object.assign({name:cleanName(filename),rawName:filename,source:source,ok:false,text:'',chars:0,err:'Zip kon niet worden uitgepakt: '+(e.message||e)},extra));
+      return Promise.resolve(1);
+    }
+    if(!entries.length){
+      c.auditDocs.push(Object.assign({name:cleanName(filename),rawName:filename,source:source,ok:false,text:'',chars:0,err:'Geen leesbare documenten (.docx/.xlsx/.pdf) in de zip'},extra));
+      return Promise.resolve(1);
+    }
+    // Elk bestand in de zip sequentieel verwerken
+    var added=0;
+    var seq=Promise.resolve();
+    entries.forEach(function(en){
+      seq=seq.then(function(){
+        return extractDocText(en.name,en.buffer).then(function(res){
+          c.auditDocs.push(Object.assign({
+            name:cleanName(en.name),
+            rawName:en.name,
+            source:source,
+            fromZip:cleanName(filename),
+            ext:(en.name.match(/\.([^.]+)$/)||['',''])[1].toLowerCase(),
+            ok:res.ok,text:res.text||'',chars:res.chars||0,truncated:!!res.truncated,err:res.err||''
+          },extra));
+          added++;
+        });
+      });
+    });
+    return seq.then(function(){return added;});
+  }
+  // Enkel document
+  return extractDocText(filename,buffer).then(function(res){
+    c.auditDocs.push(Object.assign({
+      name:cleanName(filename),
+      rawName:filename,
+      source:source,
+      ext:ext,
+      ok:res.ok,text:res.text||'',chars:res.chars||0,truncated:!!res.truncated,err:res.err||''
+    },extra));
+    return 1;
+  });
+}
+
 function bulkLocalFiles(fileList){
   var files=Array.prototype.slice.call(fileList||[]);
   if(!files.length)return;
   var c=_ensureAuditDocs();if(!c)return;
   ST._bulkBusy=true;ST._bulkProg='Libraries laden…';renderModal();
-  var done=0;
-  var seq=_ensureLibs().then(function(){ST._bulkProg='0 van '+files.length+' ingelezen';renderModal();});
+  var fileNo=0;
+  var seq=_ensureLibs().then(function(){ST._bulkProg='0 van '+files.length+' verwerkt';renderModal();});
   files.forEach(function(file){
     seq=seq.then(function(){
       return file.arrayBuffer().then(function(buf){
-        return extractDocText(file.name,buf).then(function(res){
-          c.auditDocs.push({
-            name:cleanName(file.name),
-            rawName:file.name,
-            source:'local',
-            ext:(file.name.match(/\.([^.]+)$/)||['',''])[1].toLowerCase(),
-            ok:res.ok,text:res.text||'',chars:res.chars||0,truncated:!!res.truncated,err:res.err||''
-          });
-          done++;ST._bulkProg=done+' van '+files.length+' ingelezen';renderModal();
+        return _processBuffer(file.name,buf,'local').then(function(){
+          fileNo++;ST._bulkProg=fileNo+' van '+files.length+' verwerkt';renderModal();
         });
       });
     });
@@ -4794,10 +4858,7 @@ function bulkFromInbox(){
       }
       return fetchSpFileBytes(d._driveId,d.spId).then(function(buf){
         var fn=d.rawName||d.name;
-        return extractDocText(fn,buf).then(function(res){
-          c.auditDocs.push({name:d.name,rawName:d.rawName||d.name,source:'sp',spId:d.spId,link:d.link||'',
-            ext:(String(fn).match(/\.([^.]+)$/)||['',''])[1].toLowerCase(),
-            ok:res.ok,text:res.text||'',chars:res.chars||0,truncated:!!res.truncated,err:res.err||''});
+        return _processBuffer(fn,buf,'sp',{spId:d.spId,link:d.link||''}).then(function(){
           done++;ST._bulkProg=done+' van '+total+' verwerkt';renderModal();
         });
       }).catch(function(e){
