@@ -255,11 +255,12 @@ tbody tr:hover td{background:#F7FAFD;}
 .divider{border:none;border-top:1px solid var(--border);margin:1.25rem 0;}
 </style>
 <!-- Libraries voor tekstextractie uit geuploade documenten (bulk audit-beoordeling) -->
-<!-- fflate: uitpakken van docx/xlsx (ZIP). pdf.js: tekst uit pdf. Beide via cdnjs. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/fflate/0.8.2/umd/index.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- fflate: uitpakken van docx/xlsx (ZIP). pdf.js: tekst uit pdf. Via jsdelivr (bevestigd werkende UMD-paden). -->
+<!-- Vangnet _ensureLibs() in het hoofdscript herlaadt deze indien nodig vóór verwerking. -->
+<script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script>
-if(window.pdfjsLib){window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}
+if(window.pdfjsLib){window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';}
 </script>
 </head>
 <body>
@@ -4565,6 +4566,35 @@ function fetchFolderChildren(ref){
 }
 
 // Recursief alle bestanden ophalen uit map én submappen (max 3 lagen diep)
+// ── Library-vangnet ─────────────────────────────────────────────────
+// De head laadt fflate + pdf.js eager. Mocht dat falen (CDN geblokkeerd,
+// 404, of nog niet klaar), dan laadt _ensureLibs ze alsnog en wacht erop.
+function _loadScript(src){
+  return new Promise(function(res,rej){
+    var s=document.createElement('script');
+    s.src=src;
+    s.onload=function(){res();};
+    s.onerror=function(){rej(new Error('Kon niet laden: '+src));};
+    document.head.appendChild(s);
+  });
+}
+function _ensureLibs(){
+  var jobs=[];
+  if(!window.fflate){
+    jobs.push(_loadScript('https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js'));
+  }
+  if(!window.pdfjsLib){
+    jobs.push(_loadScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js').then(function(){
+      if(window.pdfjsLib){window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';}
+    }));
+  }
+  return Promise.all(jobs).then(function(){
+    if(!window.fflate)throw new Error('fflate (docx/xlsx-uitpakken) kon niet geladen worden. Controleer je internetverbinding of of cdn.jsdelivr.net bereikbaar is.');
+    // pdf.js is optioneel: alleen nodig voor pdf. Geen harde fout als het ontbreekt.
+    return true;
+  });
+}
+
 // ═══════════════════════════════════════════
 // TEKSTEXTRACTIE — bulk audit-document analyse (laag 1)
 // Eén pad voor lokale uploads én SharePoint-downloads: input is altijd een ArrayBuffer.
@@ -4700,9 +4730,9 @@ function bulkLocalFiles(fileList){
   var files=Array.prototype.slice.call(fileList||[]);
   if(!files.length)return;
   var c=_ensureAuditDocs();if(!c)return;
-  ST._bulkBusy=true;ST._bulkProg='0 van '+files.length+' ingelezen';renderModal();
+  ST._bulkBusy=true;ST._bulkProg='Libraries laden…';renderModal();
   var done=0;
-  var seq=Promise.resolve();
+  var seq=_ensureLibs().then(function(){ST._bulkProg='0 van '+files.length+' ingelezen';renderModal();});
   files.forEach(function(file){
     seq=seq.then(function(){
       return file.arrayBuffer().then(function(buf){
@@ -4723,7 +4753,7 @@ function bulkLocalFiles(fileList){
     ST._bulkBusy=false;ST._bulkProg='';saveDB();renderModal();
   }).catch(function(e){
     ST._bulkBusy=false;ST._bulkProg='';renderModal();
-    alert('Fout bij inlezen: '+(e.message||e));
+    alert('Kon documenten niet inlezen:\n\n'+(e.message||e));
   });
 }
 
@@ -4748,9 +4778,9 @@ function bulkFromInbox(){
     return true;
   });
   if(!items.length)return;
-  ST._bulkBusy=true;ST._bulkProg='SharePoint-bestanden ophalen\u2026';renderModal();
+  ST._bulkBusy=true;ST._bulkProg='Libraries laden\u2026';renderModal();
   var done=0;var total=items.length;
-  var seq=Promise.resolve();
+  var seq=_ensureLibs().then(function(){ST._bulkProg='SharePoint-bestanden ophalen\u2026';renderModal();});
   items.forEach(function(d){
     seq=seq.then(function(){
       // spId bij inbox-items is een driveItem-id; we hebben de driveId nodig.
@@ -4776,7 +4806,8 @@ function bulkFromInbox(){
       });
     });
   });
-  seq.then(function(){ST._bulkBusy=false;ST._bulkProg='';saveDB();renderModal();});
+  seq.then(function(){ST._bulkBusy=false;ST._bulkProg='';saveDB();renderModal();})
+     .catch(function(e){ST._bulkBusy=false;ST._bulkProg='';renderModal();alert('Kon SharePoint-documenten niet inlezen:\n\n'+(e.message||e));});
 }
 
 function removeAuditDoc(di){
