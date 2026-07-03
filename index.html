@@ -621,7 +621,7 @@ function aDesc(id){return ANNEX_CTRL_DESC['A.'+id]||ANNEX_CTRL_DESC[id]||{};}
 
 var AUDIT_STATUSES=['open','compliant','ofi','minor','major'];
 var DB={impl:[],audit:[],gap:[]};
-var ST={module:'impl',view:'clients',sel:null,tab:'domains',modal:null,mdata:null,search:'',fSt:'',fCat:'',expandedPhase:null,auditTab:'clausules',auditGrp:'A.5',gapTab:'clausules',gapGrp:'A.5',gapSearch:'',gapFStatus:'',interviewGrp:'A.5',interviewSubTab:'annexa',soaGrp:'all',riskF:'all',riskFSt:'',openNotes:{},openDomains:{}};
+var ST={module:'impl',view:'clients',sel:null,tab:'domains',modal:null,mdata:null,search:'',fSt:'',fCat:'',expandedPhase:null,auditTab:'clausules',auditGrp:'all',gapTab:'clausules',gapGrp:'A.5',gapSearch:'',gapFStatus:'',interviewGrp:'A.5',interviewSubTab:'annexa',soaGrp:'all',riskF:'all',riskFSt:'',openNotes:{},openDomains:{}};
 var importFiles=[];
 
 // ═══════════════════════════════════════════
@@ -3259,19 +3259,18 @@ function renderAuditClausules(c){
 }
 
 function renderAuditAnnexA(c){
-  var groups=['A.5','A.6','A.7','A.8'];
-  var labels={'A.5':'A.5 \u2014 Organisational controls (37)','A.6':'A.6 \u2014 People controls (8)','A.7':'A.7 \u2014 Physical controls (14)','A.8':'A.8 \u2014 Technological controls (34)'};
+  var groups=['all','A.5','A.6','A.7','A.8'];
   var tabH='<div style="display:flex;gap:4px;margin-bottom:1.25rem;flex-wrap:wrap">';
   groups.forEach(function(g){
-    var tc={'A.5':'tag-a5','A.6':'tag-a6','A.7':'tag-a7','A.8':'tag-a8'}[g]||'tag';
-    tabH+='<button onclick="ST.auditGrp=\''+g+'\';renderAuditGrp()" class="btn btn-sm '+(ST.auditGrp===g?'btn-primary':'')+'" style="font-size:12px">'+g+'</button>';
+    var label=g==='all'?'Alle':g;
+    tabH+='<button onclick="ST.auditGrp=\''+g+'\';renderAuditGrp()" class="btn btn-sm '+(ST.auditGrp===g?'btn-primary':'')+'" style="font-size:12px">'+label+'</button>';
   });
   tabH+='</div><div id="audit-grp-content">'+buildAuditAnnexGrp(c)+'</div>';
   return tabH;
 }
 
 function buildAuditAnnexGrp(c){
-  var rows=c.annexA.filter(function(x){return x.group===ST.auditGrp;});
+  var rows=(ST.auditGrp&&ST.auditGrp!=='all')?c.annexA.filter(function(x){return x.group===ST.auditGrp;}):c.annexA.slice();
   var ap=rows.filter(function(x){return x.applicable;});
   var conf=ap.filter(function(x){return x.status==='compliant';}).length;
   var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:13px;color:var(--text-muted)">'+ap.length+' applicable &middot; '+conf+' conform</div><button class="btn btn-sm" onclick="toggleAllApplicable()">Alles aan/uit</button></div>';
@@ -3317,7 +3316,7 @@ function toggleApplicable(ri){
 
 function toggleAllApplicable(){
   var c=clients()[ST.sel];
-  var rows=c.annexA.filter(function(x){return x.group===ST.auditGrp;});
+  var rows=(ST.auditGrp&&ST.auditGrp!=='all')?c.annexA.filter(function(x){return x.group===ST.auditGrp;}):c.annexA.slice();
   var allOn=rows.every(function(x){return x.applicable;});
   rows.forEach(function(x){x.applicable=!allOn;if(allOn)x.status='';});
   saveDB();renderAuditGrp();
@@ -3482,19 +3481,18 @@ function renderAuditClausules(c){
 }
 
 function renderAuditAnnexA(c){
-  var groups=['A.5','A.6','A.7','A.8'];
-  var labels={'A.5':'A.5 \u2014 Organisational controls (37)','A.6':'A.6 \u2014 People controls (8)','A.7':'A.7 \u2014 Physical controls (14)','A.8':'A.8 \u2014 Technological controls (34)'};
+  var groups=['all','A.5','A.6','A.7','A.8'];
   var tabH='<div style="display:flex;gap:4px;margin-bottom:1.25rem;flex-wrap:wrap">';
   groups.forEach(function(g){
-    var tc={'A.5':'tag-a5','A.6':'tag-a6','A.7':'tag-a7','A.8':'tag-a8'}[g]||'tag';
-    tabH+='<button onclick="ST.auditGrp=\''+g+'\';renderAuditGrp()" class="btn btn-sm '+(ST.auditGrp===g?'btn-primary':'')+'" style="font-size:12px">'+g+'</button>';
+    var label=g==='all'?'Alle':g;
+    tabH+='<button onclick="ST.auditGrp=\''+g+'\';renderAuditGrp()" class="btn btn-sm '+(ST.auditGrp===g?'btn-primary':'')+'" style="font-size:12px">'+label+'</button>';
   });
   tabH+='</div><div id="audit-grp-content">'+buildAuditAnnexGrp(c)+'</div>';
   return tabH;
 }
 
 function buildAuditAnnexGrp(c){
-  var rows=c.annexA.filter(function(x){return x.group===ST.auditGrp;});
+  var rows=(ST.auditGrp&&ST.auditGrp!=='all')?c.annexA.filter(function(x){return x.group===ST.auditGrp;}):c.annexA.slice();
   var ap=rows.filter(function(x){return x.applicable;});
   var conf=ap.filter(function(x){return x.status==='compliant';}).length;
   var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:13px;color:var(--text-muted)">'+ap.length+' applicable &middot; '+conf+' conform</div><button class="btn btn-sm" onclick="toggleAllApplicable()">Alles aan/uit</button></div>';
@@ -3538,7 +3536,7 @@ function toggleApplicable(ri){
 
 function toggleAllApplicable(){
   var c=clients()[ST.sel];
-  var rows=c.annexA.filter(function(x){return x.group===ST.auditGrp;});
+  var rows=(ST.auditGrp&&ST.auditGrp!=='all')?c.annexA.filter(function(x){return x.group===ST.auditGrp;}):c.annexA.slice();
   var allOn=rows.every(function(x){return x.applicable;});
   rows.forEach(function(x){x.applicable=!allOn;if(allOn)x.status='';});
   saveDB();renderAuditGrp();
@@ -3900,11 +3898,13 @@ function renderModal(){
     var c=clients()[ST.sel];
     var m=matchDocsToNorms(c);
     var docsRef=c.auditDocs||[];
+    var matchQueue=buildAiMatchQueue(c);
     var _pillsFor=function(idxs){
       if(!idxs.length)return '<span style="font-size:11px;color:#B45309;background:#FEF3C7;padding:2px 8px;border-radius:10px;font-weight:500">Geen kandidaat-document</span>';
       return idxs.map(function(di){
         var dd=docsRef[di]||{};
-        return '<span style="display:inline-flex;align-items:center;font-size:11px;color:#0F6E56;background:#E1F5EE;padding:2px 8px;border-radius:10px;font-weight:500;margin:2px 4px 2px 0">'+esc(dd.name||'?')+'</span>';
+        var aiTag=(dd.aiControls&&dd.aiControls.length&&!getMultiControls(dd.rawName||dd.name).length)?' <span style="font-size:9px;font-weight:700;color:#1F55A6" title="Gekoppeld via AI-inhoudsanalyse, niet via bestandsnaam">AI</span>':'';
+        return '<span style="display:inline-flex;align-items:center;font-size:11px;color:#0F6E56;background:#E1F5EE;padding:2px 8px;border-radius:10px;font-weight:500;margin:2px 4px 2px 0">'+esc(dd.name||'?')+aiTag+'</span>';
       }).join('');
     };
     var clauseRows=m.clauseResults.map(function(r){
@@ -3921,9 +3921,30 @@ function renderModal(){
     }).join('');
     var clauseHit=m.clauseResults.filter(function(r){return r.docIdxs.length;}).length;
     var annexHit=m.annexResults.filter(function(r){return r.docIdxs.length;}).length;
+    // AI-matchscan sectie: alleen tonen als er iets te scannen valt, of als hij net gedraaid heeft.
+    var matchSection='';
+    if(matchQueue.length&&!ST._matchStarted){
+      matchSection='<div style="background:var(--surface);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px">'+
+        '<div style="font-size:12px;color:var(--text-muted)">'+matchQueue.length+' document'+(matchQueue.length!==1?'en':'')+' had'+(matchQueue.length!==1?'den':'')+' geen kandidaat op bestandsnaam. Laat de AI de inhoud bekijken om alsnog te koppelen.</div>'+
+        '<button class="btn btn-sm" style="flex-shrink:0" onclick="runAiDocMatching()">\u{1F50E} AI laten meekijken</button>'+
+      '</div>';
+    } else if(ST._matchStarted){
+      var mResults=ST._matchResults||[];
+      if(ST._matchBusy){
+        matchSection='<div style="background:var(--surface);border-radius:8px;padding:10px 14px;margin-bottom:14px">'+
+          '<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">\u231B AI-matchscan: '+(ST._matchProg||'')+'</div>'+
+          '<div style="height:5px;background:var(--white);border-radius:4px;overflow:hidden"><div style="height:100%;background:#1F55A6;width:'+(ST._matchQueue&&ST._matchQueue.length?Math.round(mResults.length/ST._matchQueue.length*100):0)+'%"></div></div>'+
+          '<div class="modal-actions" style="margin-top:8px"><button class="btn btn-sm" onclick="cancelAiDocMatching()">Annuleren</button></div>'+
+        '</div>';
+      } else if(ST._matchDone){
+        var mFound=mResults.filter(function(r){return r.ok&&r.ctrls&&r.ctrls.length;}).length;
+        matchSection='<div style="background:#E1F5EE;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#0F6E56">\u2713 AI-matchscan klaar: '+mFound+' van '+mResults.length+' documenten alsnog gekoppeld aan een norm.</div>';
+      }
+    }
     root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:640px;max-height:88vh;display:flex;flex-direction:column">'+
       '<div class="modal-title">\u{1F50D} Matchresultaat per norm</div>'+
-      '<div style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">Op basis van bestandsnaam zijn kandidaat-documenten gekoppeld aan elke clausule en elke toepasselijke Annex A-control (uit de SoA). Dit is nog geen beoordeling \u2014 alleen een deterministische koppeling, zonder AI.</div>'+
+      '<div style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">Op basis van bestandsnaam zijn kandidaat-documenten gekoppeld aan elke clausule en elke toepasselijke Annex A-control (uit de SoA). Dit is nog geen beoordeling \u2014 alleen een koppeling.</div>'+
+      matchSection+
       '<div style="display:flex;gap:16px;margin-bottom:14px">'+
         '<div style="flex:1;background:var(--surface);border-radius:8px;padding:10px 12px"><div style="font-size:20px;font-weight:700;color:var(--text)">'+clauseHit+' / '+m.clauseResults.length+'</div><div style="font-size:11px;color:var(--text-muted)">Clausules met kandidaat</div></div>'+
         '<div style="flex:1;background:var(--surface);border-radius:8px;padding:10px 12px"><div style="font-size:20px;font-weight:700;color:var(--text)">'+annexHit+' / '+m.annexResults.length+'</div><div style="font-size:11px;color:var(--text-muted)">Applicable controls met kandidaat</div></div>'+
@@ -4002,10 +4023,13 @@ function renderModal(){
               '<span style="font-size:10px;font-weight:600;color:'+(stColor[r.status]||'#5A6B7E')+';background:'+(stColor[r.status]||'#5A6B7E')+'1A;padding:2px 7px;border-radius:8px;flex-shrink:0">'+(stLbl[r.status]||r.status)+'</span>'+
             '</div>';
           } else {
-            body+='<div style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--border)">'+
+            body+='<div style="padding:6px 4px;border-bottom:1px solid var(--border)">'+
+              '<div style="display:flex;align-items:center;gap:8px">'+
               '<span style="font-family:DM Mono,monospace;font-size:11px;color:var(--text-muted);width:44px;flex-shrink:0">'+idLbl+'</span>'+
               '<span style="flex:1;font-size:12px;color:var(--text)">'+esc(r.name)+'</span>'+
-              '<span style="font-size:10px;font-weight:600;color:#DC2626;background:#FEE2E2;padding:2px 7px;border-radius:8px;flex-shrink:0" title="'+esc(r.err||'')+'">fout</span>'+
+              '<span style="font-size:10px;font-weight:600;color:#DC2626;background:#FEE2E2;padding:2px 7px;border-radius:8px;flex-shrink:0">fout</span>'+
+              '</div>'+
+              (r.err?'<div style="font-size:10px;color:#DC2626;margin-top:2px;padding-left:52px">'+esc(r.err)+'</div>':'')+
             '</div>';
           }
         });
@@ -4164,7 +4188,7 @@ function showControlDesc(type,cid,reqEnc,qEnc,docEnc,nameEnc){
   var docBlock=doc?'<div class="field"><label>Verwacht document</label><div class="desc-box doc-box">'+nl(doc)+'</div></div>':'';
   root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-title">'+xe(cid)+' &mdash; '+xe(name)+'</div><div class="field"><label>'+(type==='clause'?'Vereiste (ISO 27001:2022)':'Control omschrijving')+'</label><div class="desc-box">'+nl(req)+'</div></div>'+qBlock+docBlock+'<div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">Sluiten</button></div></div></div>';
 }
-function resetAiState(){ST._aiStarted=false;ST._aiBusy=false;ST._aiDone=false;ST._aiCancel=false;ST._aiResults=[];ST._aiQueue=[];ST._aiProg='';ST._aiSkipped=0;}
+function resetAiState(){ST._aiStarted=false;ST._aiBusy=false;ST._aiDone=false;ST._aiCancel=false;ST._aiResults=[];ST._aiQueue=[];ST._aiProg='';ST._aiSkipped=0;ST._matchStarted=false;ST._matchBusy=false;ST._matchDone=false;ST._matchCancel=false;ST._matchResults=[];ST._matchQueue=[];ST._matchProg='';}
 function closeModal(){ST.modal=null;ST.mdata=null;ST._ddShowAll=null;ST._bulkBusy=false;ST._bulkProg='';resetAiState();renderModal();}
 function setTab(t){if(t==='phases'||t==='docs')t='domains';ST.tab=t;ST.search='';ST.fSt='';ST.fCat='';ST.riskF='all';ST.riskFSt='';ST.expandedPhase=null;render();}
 function setAuditTab(t){ST.auditTab=t;render();}
@@ -4174,7 +4198,7 @@ function goHome(){ST.view='clients';ST.sel=null;render();}
 function updatePhase(v){var c=clients()[ST.sel];if(!c)return;c.phase=v;saveDB();}
 
 function openClient(i){
-  ST.sel=i;ST.view='detail';ST.tab='domains';ST.auditTab='clausules';ST.auditGrp='A.5';ST.gapTab='clausules';ST.gapGrp='A.5';ST.gapSearch='';ST.gapFStatus='';ST.interviewGrp='A.5';ST.interviewSubTab='annexa';ST.search='';ST.fSt='';ST.fCat='';ST.expandedPhase=null;ST.openNotes={};ST.openDomains={};render();
+  ST.sel=i;ST.view='detail';ST.tab='domains';ST.auditTab='clausules';ST.auditGrp='all';ST.gapTab='clausules';ST.gapGrp='A.5';ST.gapSearch='';ST.gapFStatus='';ST.interviewGrp='A.5';ST.interviewSubTab='annexa';ST.search='';ST.fSt='';ST.fCat='';ST.expandedPhase=null;ST.openNotes={};ST.openDomains={};render();
   if(ST.module==='impl')attachSearchEvents();
 }
 
@@ -4864,7 +4888,9 @@ function matchDocsToNorms(c){
   var byClause={},byAnnex={};
   (c.auditDocs||[]).forEach(function(d,di){
     if(!d.ok||!d.text)return; // alleen succesvol uitgelezen documenten
-    var ctrls=getMultiControls(d.rawName||d.name);
+    // Combineer bestandsnaam-matches (precies, curated) met AI-inhoudsmatches
+    // (laag 2b) voor documenten waar de bestandsnaam niets opleverde.
+    var ctrls=getMultiControls(d.rawName||d.name).concat(d.aiControls||[]);
     ctrls.forEach(function(ctrl){
       if(/^A\./.test(ctrl)){
         var k=normalizeCtrlId(ctrl);
@@ -4885,6 +4911,64 @@ function matchDocsToNorms(c){
   });
   return {clauseResults:clauseResults,annexResults:annexResults};
 }
+
+// Documenten die op bestandsnaam GEEN enkele kandidaat opleverden en nog niet
+// eerder door de AI-matchscan zijn beoordeeld.
+function buildAiMatchQueue(c){
+  var docs=c.auditDocs||[];
+  var queue=[];
+  docs.forEach(function(d,di){
+    if(!d.ok||!d.text)return; // niets om te scannen
+    if(d.aiControls!==undefined)return; // al eerder gescand (ook als resultaat leeg was)
+    var filenameCtrls=getMultiControls(d.rawName||d.name);
+    if(filenameCtrls.length)return; // matcht al op bestandsnaam, AI niet nodig
+    queue.push(di);
+  });
+  return queue;
+}
+
+// Orkestreert de AI-matchscan: per document (in de queue) de inhoud laten
+// beoordelen en het resultaat opslaan in auditDocs[i].aiControls. Zelfde
+// voorzichtige aanpak als laag 3: verse client-referentie bij elke schrijfactie
+// (zie toelichting bij runAiAssessment hierboven).
+function runAiDocMatching(){
+  var startC=clients()[ST.sel];if(!startC)return;
+  var queue=buildAiMatchQueue(startC);
+  ST._matchQueue=queue;
+  ST._matchStarted=true;ST._matchBusy=true;ST._matchCancel=false;ST._matchDone=false;ST._matchResults=[];
+  _aiMinPaceMs=700;
+  renderModal();
+  var idx=0;
+  function next(){
+    if(ST._matchCancel||idx>=ST._matchQueue.length){
+      ST._matchBusy=false;ST._matchDone=true;saveDB();renderModal();
+      return;
+    }
+    var di=ST._matchQueue[idx];
+    var readC=clients()[ST.sel];
+    var doc=(readC&&readC.auditDocs)?readC.auditDocs[di]:null;
+    if(!doc){idx++;next();return;}
+    ST._matchProg=(idx+1)+' van '+ST._matchQueue.length;
+    renderModal();
+    var pace=idx===0?Promise.resolve():new Promise(function(res){setTimeout(res,_aiMinPaceMs);});
+    pace.then(function(){
+      return _aiCallForDocMatch(doc.name,doc.text);
+    }).then(function(ctrls){
+      var liveC=clients()[ST.sel];
+      if(liveC&&liveC.auditDocs&&liveC.auditDocs[di]){
+        liveC.auditDocs[di].aiControls=ctrls;
+      }
+      ST._matchResults.push({name:doc.name,ok:true,ctrls:ctrls});
+      saveDB();
+      idx++;renderModal();next();
+    }).catch(function(e){
+      ST._matchResults.push({name:doc.name,ok:false,err:e.message||'fout'});
+      idx++;renderModal();next();
+    });
+  }
+  next();
+}
+function cancelAiDocMatching(){ST._matchCancel=true;}
 
 // ── Laag 3: AI-concept per norm ──────────────────────────────────────
 // Alleen normen met minstens 1 kandidaat-document (uit laag 2) worden aan de
@@ -4962,8 +5046,19 @@ function _aiParseResponse(data){
 
 // Kiest de route: eerst lokale key (rechtstreeks naar Anthropic), anders de
 // Azure Function-proxy (als die geconfigureerd is), anders een duidelijke fout.
-function _aiCallForNorm(type,id,name,reqText,docText){
-  var prompt=_aiBuildPrompt(type,id,name,reqText,docText);
+// Eén poging, geen retry. Fouten krijgen een .status erbij zodat de caller
+// kan onderscheiden tussen "rate limit, straks opnieuw proberen" (429) en
+// andere fouten (bijv. onvoldoende credit, ongeldige key — die lossen zichzelf niet op).
+// Dynamisch bijgehouden minimum-pauze tussen aanroepen. Begint laag, maar wordt
+// omhoog bijgesteld zodra Anthropic een rate-limit teruggeeft — voorkomt dat de
+// rest van de batch keer op keer tegen dezelfde muur blijft lopen.
+var _aiMinPaceMs=700;
+
+// Generieke laagste-niveau aanroep: stuurt een los tekstprompt naar de geconfigureerde
+// route (lokale key of Azure-proxy) en geeft de RUWE Anthropic-response terug.
+// Wordt hergebruikt door zowel de per-norm beoordeling (laag 3) als de
+// document\u2192norm matching-scan (laag 2b, AI-ondersteund).
+function _aiRawRequest(promptText){
   var localKey=getLocalAnthropicKey();
 
   if(localKey){
@@ -4975,14 +5070,19 @@ function _aiCallForNorm(type,id,name,reqText,docText){
         'anthropic-dangerous-direct-browser-access':'true',
         'content-type':'application/json'
       },
-      body:JSON.stringify({model:'claude-sonnet-5',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+      body:JSON.stringify({model:'claude-sonnet-5',max_tokens:1000,messages:[{role:'user',content:promptText}]})
     }).then(function(r){
-      if(!r.ok)return r.json().catch(function(){return null;}).then(function(errBody){
-        var msg=(errBody&&errBody.error&&errBody.error.message)?errBody.error.message:('API-fout ('+r.status+')');
-        throw new Error(msg);
-      });
+      if(!r.ok){
+        var retryAfter=r.headers.get('retry-after');
+        return r.json().catch(function(){return null;}).then(function(errBody){
+          var msg=(errBody&&errBody.error&&errBody.error.message)?errBody.error.message:('API-fout ('+r.status+')');
+          var e=new Error(msg);e.status=r.status;
+          if(retryAfter)e.retryAfterMs=Math.ceil(parseFloat(retryAfter)*1000);
+          throw e;
+        });
+      }
       return r.json();
-    }).then(_aiParseResponse);
+    });
   }
 
   if(ANTHROPIC_PROXY_URL){
@@ -4990,15 +5090,84 @@ function _aiCallForNorm(type,id,name,reqText,docText){
       return fetch(ANTHROPIC_PROXY_URL,{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+aadToken},
-        body:JSON.stringify({model:'claude-sonnet-5',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+        body:JSON.stringify({model:'claude-sonnet-5',max_tokens:1000,messages:[{role:'user',content:promptText}]})
       });
     }).then(function(r){
-      if(!r.ok)throw new Error('Proxy-fout ('+r.status+')');
+      if(!r.ok){
+        var retryAfter=r.headers.get('retry-after');
+        var e=new Error('Proxy-fout ('+r.status+')');e.status=r.status;
+        if(retryAfter)e.retryAfterMs=Math.ceil(parseFloat(retryAfter)*1000);
+        throw e;
+      }
       return r.json();
-    }).then(_aiParseResponse);
+    });
   }
 
   return Promise.reject(new Error('Geen Anthropic API-key ingesteld. Vul er een in via het scherm hierboven.'));
+}
+
+// Retry-wrapper (generiek), specifiek voor rate-limit fouten (HTTP 429).
+// Gebruikt de exacte wachttijd die Anthropic zelf teruggeeft (retry-after header)
+// i.p.v. te gokken. Andere fouten (ongeldige key, onvoldoende credit) worden
+// niet herhaald \u2014 dat lost zichzelf toch niet op door opnieuw te proberen.
+// Ruime 8 pogingen: bij een lage limiet (bijv. 5/min, v\u00f3\u00f3r eerste credit-storting
+// op console.anthropic.com) kan een volledige batch best wat wachttijd vergen \u2014
+// beter rustig doorlopen dan halverwege opgeven.
+function _aiRawRequestWithRetry(promptText){
+  var maxAttempts=8;
+  function attempt(n){
+    return _aiRawRequest(promptText).catch(function(err){
+      if(err.status===429&&n<maxAttempts){
+        var waitMs=err.retryAfterMs||(3000*n);
+        _aiMinPaceMs=Math.max(_aiMinPaceMs,waitMs+500); // volgende items ook rustiger aan
+        ST._aiProg='Rate limit bereikt \u2014 wacht '+Math.ceil(waitMs/1000)+'s en probeert opnieuw ('+n+'/'+(maxAttempts-1)+')';
+        ST._matchProg=ST._aiProg;
+        renderModal();
+        return new Promise(function(res){setTimeout(res,waitMs);}).then(function(){return attempt(n+1);});
+      }
+      throw err;
+    });
+  }
+  return attempt(1);
+}
+
+// Per-norm beoordeling (laag 3): bouwt de prompt en parseert het status/finding/improvement-antwoord.
+function _aiCallForNorm(type,id,name,reqText,docText){
+  var prompt=_aiBuildPrompt(type,id,name,reqText,docText);
+  return _aiRawRequestWithRetry(prompt).then(_aiParseResponse);
+}
+
+// ── AI-ondersteunde document\u2192norm matching (laag 2b) ────────────────────
+// Voor documenten die op bestandsnaam GEEN enkele kandidaat-norm opleverden:
+// laat de AI de INHOUD van het document beoordelen en teruggeven welke
+// clausules/Annex A-controls het waarschijnlijk afdekt. Dit draait bewust
+// V\u00d3\u00d3R de inhoudelijke beoordeling (laag 3) \u2014 eerst koppelen, dan pas oordelen \u2014
+// zodat laag 3 nooit een document tegen een niet-verwante norm hoeft te leggen.
+function _aiBuildMatchPrompt(docName,docText){
+  return 'Je bent een ISO 27001:2022 auditor-assistent. Bepaal op basis van de INHOUD welke ISO 27001:2022 clausules (4-10) en/of Annex A-controls dit document het meest waarschijnlijk afdekt.\n\n'+
+    'DOCUMENT: '+docName+'\n'+
+    'INHOUD:\n'+docText+'\n\n'+
+    'Antwoord ALLEEN met een geldige JSON-array van ISO-referenties, zonder markdown-fences, zonder toelichting erbuiten. Voorbeeld: [\"Clause 6.1.2\",\"A.5.15\",\"A.8.3\"]\n\n'+
+    'Richtlijnen:\n'+
+    '- Clausules in het formaat \"Clause X.X\" (bijv. \"Clause 5.1\").\n'+
+    '- Annex A-controls in het formaat \"A.X.X\" (bijv. \"A.5.15\").\n'+
+    '- Geef alleen normen waarvan dit document daadwerkelijk het beleid, de procedure, of het bewijs lijkt te zijn \u2014 niet losjes gerelateerd of toevallig een overlappend onderwerp.\n'+
+    '- Maximaal 5 normen. Geef een lege array [] als er geen duidelijke match is.';
+}
+
+function _aiParseMatchResponse(data){
+  var txt=(data.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('\n').trim();
+  txt=txt.replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim();
+  var parsed;
+  try{parsed=JSON.parse(txt);}catch(e){throw new Error('Kon AI-matchantwoord niet als JSON lezen');}
+  if(!Array.isArray(parsed))throw new Error('AI-matchantwoord is geen array');
+  var VALID_RE=/^(Clause \d+(\.\d+)*|A\.\d+(\.\d+)*)$/;
+  return parsed.filter(function(x){return typeof x==='string'&&VALID_RE.test(x);}).slice(0,5);
+}
+
+function _aiCallForDocMatch(docName,docText){
+  var prompt=_aiBuildMatchPrompt(docName,docText);
+  return _aiRawRequestWithRetry(prompt).then(_aiParseMatchResponse);
 }
 
 // Bouwt de queue: alleen normen met >=1 kandidaat-document, exclusief normen
@@ -5022,13 +5191,21 @@ function buildAiQueue(c){
 }
 
 // Orkestreert de sequentiële AI-beoordeling. Schrijft direct in c.clauses/c.annexA.
+// BELANGRIJK: deze functie mag NOOIT één keer een verwijzing naar de klant
+// pakken en die vasthouden tijdens de hele (mogelijk minutenlange) batch.
+// De achtergrond-SharePoint-sync (spPoll, elke 10s) kan het hele DB-object
+// vervangen zodra er tussentijds iets opgeslagen is — een oude verwijzing
+// wordt dan een "verweesde kopie" en schrijfacties erop gaan stilletjes
+// verloren bij de volgende saveDB(). Daarom: bij ELKE schrijfactie de klant
+// opnieuw ophalen uit de actuele clients()-array, nooit een vaste var 'c'
+// gebruiken voor mutaties.
 function runAiAssessment(){
-  var c=clients()[ST.sel];if(!c)return;
-  var qb=buildAiQueue(c);
+  var startC=clients()[ST.sel];if(!startC)return;
+  var qb=buildAiQueue(startC);
   ST._aiQueue=qb.queue;ST._aiSkipped=qb.skipped;
   ST._aiStarted=true;ST._aiBusy=true;ST._aiCancel=false;ST._aiDone=false;ST._aiResults=[];
+  _aiMinPaceMs=700; // reset bij elke nieuwe run — een eerdere rate-limit-ervaring blijft niet onnodig plakken
   renderModal();
-  var docsRef=c.auditDocs||[];
   var idx=0;
   function next(){
     if(ST._aiCancel||idx>=ST._aiQueue.length){
@@ -5036,21 +5213,36 @@ function runAiAssessment(){
       return;
     }
     var q=ST._aiQueue[idx];
+    // docsRef vers ophalen i.p.v. hergebruiken — zelfde reden als hierboven.
+    var docsRefNow=(clients()[ST.sel]||{}).auditDocs||[];
     ST._aiProg=(idx+1)+' van '+ST._aiQueue.length;
+    renderModal();
     var reqText=_aiReqTextFor(q.type,q.id);
-    var docText=_aiCombinedText(q.docIdxs,docsRef);
-    _aiCallForNorm(q.type,q.id,q.name,reqText,docText).then(function(res){
-      var arr=q.type==='clause'?c.clauses:c.annexA;
-      var itemIdx=arr.findIndex(function(x){return x.id===q.id;});
-      if(itemIdx!==-1){
-        var docNames=q.docIdxs.map(function(di){return(docsRef[di]||{}).name;}).filter(Boolean).join(' + ');
-        var linkDoc=q.docIdxs.map(function(di){return docsRef[di];}).find(function(d){return d&&d.link;});
-        arr[itemIdx].docName=docNames;
-        arr[itemIdx].docLink=(linkDoc&&linkDoc.link)||arr[itemIdx].docLink||'';
-        arr[itemIdx].status=res.status;
-        arr[itemIdx].finding=res.finding;
-        arr[itemIdx].improvement=res.improvement;
-        arr[itemIdx].aiConcept=true;
+    var docText=_aiCombinedText(q.docIdxs,docsRefNow);
+    // Kleine pauze tussen aanroepen (behalve de eerste) om rate limits te voorkomen
+    // i.p.v. alleen achteraf te herstellen met retries.
+    var pace=idx===0?Promise.resolve():new Promise(function(res){setTimeout(res,_aiMinPaceMs);});
+    pace.then(function(){
+      return _aiCallForNorm(q.type,q.id,q.name,reqText,docText);
+    }).then(function(res){
+      // Klant + documentenlijst PAS NU, vlak vóór het schrijven, opnieuw ophalen.
+      // Zo schrijven we altijd op de actuele DB, ook als een achtergrondsync
+      // het object intussen heeft vervangen.
+      var liveC=clients()[ST.sel];
+      if(liveC){
+        var docsRefWrite=liveC.auditDocs||[];
+        var arr=q.type==='clause'?liveC.clauses:liveC.annexA;
+        var itemIdx=arr.findIndex(function(x){return x.id===q.id;});
+        if(itemIdx!==-1){
+          var docNames=q.docIdxs.map(function(di){return(docsRefWrite[di]||{}).name;}).filter(Boolean).join(' + ');
+          var linkDoc=q.docIdxs.map(function(di){return docsRefWrite[di];}).find(function(d){return d&&d.link;});
+          arr[itemIdx].docName=docNames;
+          arr[itemIdx].docLink=(linkDoc&&linkDoc.link)||arr[itemIdx].docLink||'';
+          arr[itemIdx].status=res.status;
+          arr[itemIdx].finding=res.finding;
+          arr[itemIdx].improvement=res.improvement;
+          arr[itemIdx].aiConcept=true;
+        }
       }
       ST._aiResults.push({type:q.type,id:q.id,name:q.name,ok:true,status:res.status});
       saveDB();
