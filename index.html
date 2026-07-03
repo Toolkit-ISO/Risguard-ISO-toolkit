@@ -3943,11 +3943,20 @@ function renderModal(){
     if(!ST._aiStarted){
       var qb=buildAiQueue(c);
       body+='<div style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">De AI beoordeelt per norm of het kandidaat-document de ISO-eis afdekt, en vult status, bevinding en verbetersuggestie in als <strong>concept</strong> (geel gemarkeerd). Niets wordt automatisch goedgekeurd \u2014 jij loopt alle antwoorden na en bevestigt of corrigeert ze in de audittabel.</div>';
-      if(!ANTHROPIC_PROXY_URL){
-        body+='<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#92660A">\u26a0\ufe0f AI-proxy nog niet geconfigureerd. Deze stap heeft een Azure Function nodig die de Anthropic API-key server-side bewaart (overleg met Thom/Mohamed). Zodra die live is, vul je de URL in bij <code>ANTHROPIC_PROXY_URL</code> in de code.</div>';
+      var hasLocalKey=!!getLocalAnthropicKey();
+      if(!hasLocalKey&&!ANTHROPIC_PROXY_URL){
+        body+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">';
+        body+='<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Anthropic API-key instellen</div>';
+        body+='<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Vul je eigen Anthropic API-key in (haal er een op via <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>). Deze wordt alleen lokaal in <em>deze browser</em> bewaard \u2014 nooit verzonden naar GitHub of gedeeld met anderen.</div>';
+        body+='<input type="password" id="ai-key-input" placeholder="sk-ant-..." style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:8px;box-sizing:border-box" />';
+        body+='<button class="btn btn-primary btn-sm" onclick="saveAnthropicKey()">Opslaan</button>';
+        body+='</div>';
         body+='<div class="modal-actions" style="margin-top:14px"><button class="btn" onclick="openModal(\'bulkMatch\')">\u2190 Terug</button><button class="btn" onclick="closeModal()">Sluiten</button></div>';
         root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:600px;max-height:88vh;display:flex;flex-direction:column;overflow:auto"><div class="modal-title">\u2728 AI-beoordeling per norm</div>'+body+'</div></div>';
         return;
+      }
+      if(hasLocalKey){
+        body+='<div style="display:flex;align-items:center;justify-content:space-between;background:#E1F5EE;border-radius:8px;padding:8px 12px;margin-bottom:14px;font-size:12px;color:#0F6E56"><span>\u2713 Eigen API-key actief in deze browser</span><button onclick="clearAnthropicKey()" style="background:none;border:none;color:#0F6E56;text-decoration:underline;cursor:pointer;font-size:12px">wissen</button></div>';
       }
       body+='<div style="background:var(--surface);border-radius:8px;padding:12px 14px;margin-bottom:14px">';
       body+='<div style="font-size:14px;font-weight:600;color:var(--text)">'+qb.queue.length+' norm'+(qb.queue.length!==1?'en':'')+' worden beoordeeld</div>';
@@ -4920,32 +4929,76 @@ function _aiBuildPrompt(type,id,name,reqText,docText){
     '- improvement: maximaal 1 zin, concrete aanbeveling. Laat leeg ("") als status compliant is en er niets te verbeteren is.';
 }
 
-// Roept de Azure Function-proxy aan (niet rechtstreeks Anthropic — dat werkt niet
-// vanuit een gehoste site zonder API-key, en een key in publieke broncode zetten is
-// een beveiligingsrisico). De proxy bewaart de Anthropic-key server-side en valideert
-// dat de aanroeper een ingelogde Risguard-gebruiker is via het bestaande AAD-token.
+// ── Anthropic API-key: lokaal in de browser (Route B) ────────────────
+// Snelste route zonder Azure-infrastructuur: de key wordt alleen in de
+// localStorage van DEZE browser bewaard, nooit in de broncode of op GitHub.
+// Wel zichtbaar voor wie fysiek toegang heeft tot deze laptop/browser (devtools) —
+// dat is een bewust geaccepteerd, veel kleiner risico dan een key in publieke code.
+var RG_ANTHROPIC_KEY_STORAGE='rg_anthropic_key';
+function getLocalAnthropicKey(){
+  try{return localStorage.getItem(RG_ANTHROPIC_KEY_STORAGE)||'';}catch(e){return '';}
+}
+function saveAnthropicKey(){
+  var el=document.getElementById('ai-key-input');
+  var val=el?el.value.trim():'';
+  if(!val){alert('Vul eerst een API-key in.');return;}
+  try{localStorage.setItem(RG_ANTHROPIC_KEY_STORAGE,val);}catch(e){alert('Kon de key niet opslaan in deze browser.');return;}
+  renderModal();
+}
+function clearAnthropicKey(){
+  try{localStorage.removeItem(RG_ANTHROPIC_KEY_STORAGE);}catch(e){}
+  renderModal();
+}
+
+// Verwerkt het ruwe API-antwoord (zelfde formaat, ongeacht directe call of proxy).
+function _aiParseResponse(data){
+  var txt=(data.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('\n').trim();
+  txt=txt.replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim();
+  var parsed;
+  try{parsed=JSON.parse(txt);}catch(e){throw new Error('Kon AI-antwoord niet als JSON lezen');}
+  if(!parsed.status||AUDIT_STATUSES.indexOf(parsed.status)===-1)throw new Error('Onbekende status in AI-antwoord: '+parsed.status);
+  return {status:parsed.status,finding:parsed.finding||'',improvement:parsed.improvement||''};
+}
+
+// Kiest de route: eerst lokale key (rechtstreeks naar Anthropic), anders de
+// Azure Function-proxy (als die geconfigureerd is), anders een duidelijke fout.
 function _aiCallForNorm(type,id,name,reqText,docText){
-  if(!ANTHROPIC_PROXY_URL){
-    return Promise.reject(new Error('AI-proxy nog niet geconfigureerd. Vraag Thom/Mohamed om de Azure Function te deployen en vul ANTHROPIC_PROXY_URL in de code in.'));
-  }
   var prompt=_aiBuildPrompt(type,id,name,reqText,docText);
-  return acquireToken().then(function(aadToken){
-    return fetch(ANTHROPIC_PROXY_URL,{
+  var localKey=getLocalAnthropicKey();
+
+  if(localKey){
+    return fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+aadToken},
+      headers:{
+        'x-api-key':localKey,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true',
+        'content-type':'application/json'
+      },
       body:JSON.stringify({model:'claude-sonnet-5',max_tokens:1000,messages:[{role:'user',content:prompt}]})
-    });
-  }).then(function(r){
-    if(!r.ok)throw new Error('Proxy-fout ('+r.status+')');
-    return r.json();
-  }).then(function(data){
-    var txt=(data.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('\n').trim();
-    txt=txt.replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim();
-    var parsed;
-    try{parsed=JSON.parse(txt);}catch(e){throw new Error('Kon AI-antwoord niet als JSON lezen');}
-    if(!parsed.status||AUDIT_STATUSES.indexOf(parsed.status)===-1)throw new Error('Onbekende status in AI-antwoord: '+parsed.status);
-    return {status:parsed.status,finding:parsed.finding||'',improvement:parsed.improvement||''};
-  });
+    }).then(function(r){
+      if(!r.ok)return r.json().catch(function(){return null;}).then(function(errBody){
+        var msg=(errBody&&errBody.error&&errBody.error.message)?errBody.error.message:('API-fout ('+r.status+')');
+        throw new Error(msg);
+      });
+      return r.json();
+    }).then(_aiParseResponse);
+  }
+
+  if(ANTHROPIC_PROXY_URL){
+    return acquireToken().then(function(aadToken){
+      return fetch(ANTHROPIC_PROXY_URL,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+aadToken},
+        body:JSON.stringify({model:'claude-sonnet-5',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+      });
+    }).then(function(r){
+      if(!r.ok)throw new Error('Proxy-fout ('+r.status+')');
+      return r.json();
+    }).then(_aiParseResponse);
+  }
+
+  return Promise.reject(new Error('Geen Anthropic API-key ingesteld. Vul er een in via het scherm hierboven.'));
 }
 
 // Bouwt de queue: alleen normen met >=1 kandidaat-document, exclusief normen
