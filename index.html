@@ -3897,58 +3897,89 @@ function renderModal(){
 
   } else if(ST.modal==='bulkMatch'){
     var c=clients()[ST.sel];
-    var m=matchDocsToNorms(c);
-    var docsRef=c.auditDocs||[];
-    var matchQueue=buildAiMatchQueue(c);
-    var _pillsFor=function(idxs){
-      if(!idxs.length)return '<span style="font-size:11px;color:#B45309;background:#FEF3C7;padding:2px 8px;border-radius:10px;font-weight:500">Geen kandidaat-document</span>';
-      return idxs.map(function(di){
-        var dd=docsRef[di]||{};
-        var aiTag=(dd.aiControls&&dd.aiControls.length&&!getMultiControls(dd.rawName||dd.name).length)?' <span style="font-size:9px;font-weight:700;color:#1F55A6" title="Gekoppeld via AI-inhoudsanalyse, niet via bestandsnaam">AI</span>':'';
-        return '<span style="display:inline-flex;align-items:center;font-size:11px;color:#0F6E56;background:#E1F5EE;padding:2px 8px;border-radius:10px;font-weight:500;margin:2px 4px 2px 0">'+esc(dd.name||'?')+aiTag+'</span>';
-      }).join('');
-    };
-    var clauseRows=m.clauseResults.map(function(r){
-      return '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border)">'+
-        '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--text-muted);width:44px;flex-shrink:0;padding-top:2px">'+r.id+'</div>'+
-        '<div style="flex:1"><div style="font-size:12px;font-weight:500;color:var(--text);margin-bottom:3px">'+esc(r.name)+'</div><div>'+_pillsFor(r.docIdxs)+'</div></div>'+
-      '</div>';
-    }).join('');
-    var annexRows=m.annexResults.map(function(r){
-      return '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border)">'+
-        '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--text-muted);width:44px;flex-shrink:0;padding-top:2px">A.'+r.id+'</div>'+
-        '<div style="flex:1"><div style="font-size:12px;font-weight:500;color:var(--text);margin-bottom:3px">'+esc(r.name)+'</div><div>'+_pillsFor(r.docIdxs)+'</div></div>'+
-      '</div>';
-    }).join('');
-    var clauseHit=m.clauseResults.filter(function(r){return r.docIdxs.length;}).length;
-    var annexHit=m.annexResults.filter(function(r){return r.docIdxs.length;}).length;
-    // AI-matchscan sectie: alleen tonen als er iets te scannen valt, of als hij net gedraaid heeft.
-    var matchSection='';
-    if(matchQueue.length&&!ST._matchStarted){
-      matchSection='<div style="background:var(--surface);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px">'+
-        '<div style="font-size:12px;color:var(--text-muted)">'+matchQueue.length+' document'+(matchQueue.length!==1?'en':'')+' had'+(matchQueue.length!==1?'den':'')+' geen kandidaat op bestandsnaam. Laat de AI de inhoud bekijken om alsnog te koppelen.</div>'+
-        '<button class="btn btn-sm" style="flex-shrink:0" onclick="runAiDocMatching()">\u{1F50E} AI laten meekijken</button>'+
-      '</div>';
-    } else if(ST._matchStarted){
-      var mResults=ST._matchResults||[];
-      if(ST._matchBusy){
-        matchSection='<div style="background:var(--surface);border-radius:8px;padding:10px 14px;margin-bottom:14px">'+
-          '<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">\u231B AI-matchscan: '+(ST._matchProg||'')+'</div>'+
-          '<div style="height:5px;background:var(--white);border-radius:4px;overflow:hidden"><div style="height:100%;background:#1F55A6;width:'+(ST._matchQueue&&ST._matchQueue.length?Math.round(mResults.length/ST._matchQueue.length*100):0)+'%"></div></div>'+
-          '<div class="modal-actions" style="margin-top:8px"><button class="btn btn-sm" onclick="cancelAiDocMatching()">Annuleren</button></div>'+
+    var allDocs=(c.auditDocs||[]).filter(function(d){return d.ok&&d.text;});
+    var sumQueue=buildSummaryQueue(c);
+    var sumDone=sumQueue.length===0&&allDocs.length>0;
+    var nm=c._normMatch||null;
+    var body='';
+
+    // ── Sectie 1: samenvatten ──
+    if(!allDocs.length){
+      body+='<div style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">Nog geen (succesvol uitgelezen) documenten. Ga terug en lees eerst documenten in.</div>';
+      body+='<div class="modal-actions"><button class="btn" onclick="openModal(\'bulkAudit\')">\u2190 Terug</button><button class="btn" onclick="closeModal()">Sluiten</button></div>';
+      root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:640px;max-height:88vh;display:flex;flex-direction:column;overflow:auto"><div class="modal-title">\u{1F50D} Matchen</div>'+body+'</div></div>';
+      return;
+    }
+    if(!sumDone){
+      body+='<div style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">Voordat de AI per norm kan zoeken, krijgt elk document eerst een korte samenvatting \u2014 dat maakt de zoekstap daarna sneller en betrouwbaarder.</div>';
+      if(ST._sumStarted&&ST._sumBusy){
+        var sResults=ST._sumResults||[];
+        body+='<div style="background:var(--surface);border-radius:8px;padding:10px 14px;margin-bottom:14px">'+
+          '<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">\u231B Samenvatten: '+(ST._sumProg||'')+'</div>'+
+          '<div style="height:5px;background:var(--white);border-radius:4px;overflow:hidden"><div style="height:100%;background:#1F55A6;width:'+(ST._sumQueue&&ST._sumQueue.length?Math.round(sResults.length/ST._sumQueue.length*100):0)+'%"></div></div>'+
+          '<div class="modal-actions" style="margin-top:8px"><button class="btn btn-sm" onclick="cancelDocSummarization()">Annuleren</button></div>'+
         '</div>';
-      } else if(ST._matchDone){
-        var mFound=mResults.filter(function(r){return r.ok&&r.ctrls&&r.ctrls.length;}).length;
-        matchSection='<div style="background:#E1F5EE;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#0F6E56">\u2713 AI-matchscan klaar: '+mFound+' van '+mResults.length+' documenten alsnog gekoppeld aan een norm.</div>';
+      } else {
+        body+='<div style="background:var(--surface);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px">'+
+          '<div style="font-size:12px;color:var(--text-muted)">'+sumQueue.length+' document'+(sumQueue.length!==1?'en':'')+' nog niet samengevat.</div>'+
+          '<button class="btn btn-sm btn-primary" style="flex-shrink:0" onclick="runDocSummarization()">\u{1F4C4} Samenvatten starten</button>'+
+        '</div>';
+      }
+      body+='<div class="modal-actions"><button class="btn" onclick="openModal(\'bulkAudit\')">\u2190 Terug</button><button class="btn" onclick="closeModal()">Sluiten</button></div>';
+      root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this&&!ST._sumBusy)closeModal()"><div class="modal" style="max-width:640px;max-height:88vh;display:flex;flex-direction:column;overflow:auto"><div class="modal-title">\u{1F50D} Stap 1: documenten samenvatten</div>'+body+'</div></div>';
+      return;
+    }
+
+    // ── Sectie 2: per-norm zoeken (nog niet gedraaid, of bezig) ──
+    if(!nm||ST._searchStarted){
+      if(ST._searchStarted&&ST._searchBusy){
+        var qResults=ST._searchResults||[];
+        body+='<div style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">De AI zoekt per norm het meest relevante document, op basis van de samenvattingen. Dit kan een paar minuten duren.</div>';
+        body+='<div style="background:var(--surface);border-radius:8px;padding:10px 14px;margin-bottom:14px">'+
+          '<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">\u231B Zoeken: '+(ST._searchProg||'')+'</div>'+
+          '<div style="height:5px;background:var(--white);border-radius:4px;overflow:hidden"><div style="height:100%;background:#1F55A6;width:'+(ST._searchQueue&&ST._searchQueue.length?Math.round(qResults.length/ST._searchQueue.length*100):0)+'%"></div></div>'+
+          '<div class="modal-actions" style="margin-top:8px"><button class="btn btn-sm" onclick="cancelNormSearch()">Annuleren</button></div>'+
+        '</div>';
+        root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:640px;max-height:88vh;display:flex;flex-direction:column;overflow:auto"><div class="modal-title">\u{1F50D} Stap 2: per norm zoeken</div>'+body+'</div></div>';
+        return;
+      }
+      if(!nm){
+        body+='<div style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">'+allDocs.length+' documenten zijn samengevat. Laat de AI nu voor elke clausule en toepasselijke Annex A-control zoeken welk document erbij hoort.</div>';
+        body+='<div class="modal-actions" style="margin-top:14px"><button class="btn" onclick="openModal(\'bulkAudit\')">\u2190 Terug</button><button class="btn btn-primary" onclick="runNormSearch()">\u{1F50E} Start per-norm zoeken</button></div>';
+        root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:640px;max-height:88vh;display:flex;flex-direction:column;overflow:auto"><div class="modal-title">\u{1F50D} Stap 2: per norm zoeken</div>'+body+'</div></div>';
+        return;
       }
     }
+
+    // ── Sectie 3: resultaten tonen ──
+    var _pillsFor=function(foundNames){
+      if(!foundNames||!foundNames.length)return '<span style="font-size:11px;color:#B45309;background:#FEF3C7;padding:2px 8px;border-radius:10px;font-weight:500">Geen document gevonden</span>';
+      return foundNames.map(function(n){
+        return '<span style="display:inline-flex;align-items:center;font-size:11px;color:#0F6E56;background:#E1F5EE;padding:2px 8px;border-radius:10px;font-weight:500;margin:2px 4px 2px 0">'+esc(n)+'</span>';
+      }).join('');
+    };
+    var clauseResults=(c.clauses||[]).map(function(cl){return {id:cl.id,name:cl.name,found:(nm.clauses||{})[cl.id]||[]};});
+    var annexResults=(c.annexA||[]).filter(function(a){return a.applicable;}).map(function(a){return {id:a.id,name:a.name,found:(nm.annex||{})[a.id]||[]};});
+    var clauseRows=clauseResults.map(function(r){
+      return '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border)">'+
+        '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--text-muted);width:44px;flex-shrink:0;padding-top:2px">'+r.id+'</div>'+
+        '<div style="flex:1"><div style="font-size:12px;font-weight:500;color:var(--text);margin-bottom:3px">'+esc(r.name)+'</div><div>'+_pillsFor(r.found)+'</div></div>'+
+      '</div>';
+    }).join('');
+    var annexRows=annexResults.map(function(r){
+      return '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border)">'+
+        '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--text-muted);width:44px;flex-shrink:0;padding-top:2px">A.'+r.id+'</div>'+
+        '<div style="flex:1"><div style="font-size:12px;font-weight:500;color:var(--text);margin-bottom:3px">'+esc(r.name)+'</div><div>'+_pillsFor(r.found)+'</div></div>'+
+      '</div>';
+    }).join('');
+    var clauseHit=clauseResults.filter(function(r){return r.found.length;}).length;
+    var annexHit=annexResults.filter(function(r){return r.found.length;}).length;
     root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:640px;max-height:88vh;display:flex;flex-direction:column">'+
       '<div class="modal-title">\u{1F50D} Matchresultaat per norm</div>'+
-      '<div style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">Op basis van bestandsnaam zijn kandidaat-documenten gekoppeld aan elke clausule en elke toepasselijke Annex A-control (uit de SoA). Dit is nog geen beoordeling \u2014 alleen een koppeling.</div>'+
-      matchSection+
+      '<div style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">De AI heeft per norm gezocht welk document het meest waarschijnlijk relevant is. Dit is nog geen beoordeling \u2014 alleen een koppeling.</div>'+
       '<div style="display:flex;gap:16px;margin-bottom:14px">'+
-        '<div style="flex:1;background:var(--surface);border-radius:8px;padding:10px 12px"><div style="font-size:20px;font-weight:700;color:var(--text)">'+clauseHit+' / '+m.clauseResults.length+'</div><div style="font-size:11px;color:var(--text-muted)">Clausules met kandidaat</div></div>'+
-        '<div style="flex:1;background:var(--surface);border-radius:8px;padding:10px 12px"><div style="font-size:20px;font-weight:700;color:var(--text)">'+annexHit+' / '+m.annexResults.length+'</div><div style="font-size:11px;color:var(--text-muted)">Applicable controls met kandidaat</div></div>'+
+        '<div style="flex:1;background:var(--surface);border-radius:8px;padding:10px 12px"><div style="font-size:20px;font-weight:700;color:var(--text)">'+clauseHit+' / '+clauseResults.length+'</div><div style="font-size:11px;color:var(--text-muted)">Clausules met document</div></div>'+
+        '<div style="flex:1;background:var(--surface);border-radius:8px;padding:10px 12px"><div style="font-size:20px;font-weight:700;color:var(--text)">'+annexHit+' / '+annexResults.length+'</div><div style="font-size:11px;color:var(--text-muted)">Applicable controls met document</div></div>'+
       '</div>'+
       '<div style="overflow:auto;flex:1;border-top:1px solid var(--border)">'+
         '<div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin:10px 0 4px">Clausules 4\u201310</div>'+
@@ -3956,7 +3987,7 @@ function renderModal(){
         '<div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 4px">Annex A \u2014 toepasselijke controls</div>'+
         annexRows+
       '</div>'+
-      '<div class="modal-actions" style="margin-top:14px"><button class="btn" onclick="openModal(\'bulkAudit\')">\u2190 Terug</button><button class="btn btn-primary" onclick="openModal(\'bulkAI\')">Volgende: AI-beoordeling \u2192</button></div>'+
+      '<div class="modal-actions" style="margin-top:14px"><button class="btn" onclick="openModal(\'bulkAudit\')">\u2190 Terug</button><button class="btn btn-sm" onclick="runNormSearch()">\u{1F504} Opnieuw zoeken</button><button class="btn btn-primary" onclick="openModal(\'bulkAI\')">Volgende: AI-beoordeling \u2192</button></div>'+
     '</div></div>';
 
   } else if(ST.modal==='bulkAI'){
@@ -4189,7 +4220,11 @@ function showControlDesc(type,cid,reqEnc,qEnc,docEnc,nameEnc){
   var docBlock=doc?'<div class="field"><label>Verwacht document</label><div class="desc-box doc-box">'+nl(doc)+'</div></div>':'';
   root.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-title">'+xe(cid)+' &mdash; '+xe(name)+'</div><div class="field"><label>'+(type==='clause'?'Vereiste (ISO 27001:2022)':'Control omschrijving')+'</label><div class="desc-box">'+nl(req)+'</div></div>'+qBlock+docBlock+'<div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">Sluiten</button></div></div></div>';
 }
-function resetAiState(){ST._aiStarted=false;ST._aiBusy=false;ST._aiDone=false;ST._aiCancel=false;ST._aiResults=[];ST._aiQueue=[];ST._aiProg='';ST._aiSkipped=0;ST._matchStarted=false;ST._matchBusy=false;ST._matchDone=false;ST._matchCancel=false;ST._matchResults=[];ST._matchQueue=[];ST._matchProg='';}
+function resetAiState(){
+  ST._aiStarted=false;ST._aiBusy=false;ST._aiDone=false;ST._aiCancel=false;ST._aiResults=[];ST._aiQueue=[];ST._aiProg='';ST._aiSkipped=0;
+  ST._sumStarted=false;ST._sumBusy=false;ST._sumDone=false;ST._sumCancel=false;ST._sumResults=[];ST._sumQueue=[];ST._sumProg='';
+  ST._searchStarted=false;ST._searchBusy=false;ST._searchDone=false;ST._searchCancel=false;ST._searchResults=[];ST._searchQueue=[];ST._searchProg='';
+}
 function closeModal(){ST.modal=null;ST.mdata=null;ST._ddShowAll=null;ST._bulkBusy=false;ST._bulkProg='';resetAiState();renderModal();}
 function setTab(t){if(t==='phases'||t==='docs')t='domains';ST.tab=t;ST.search='';ST.fSt='';ST.fCat='';ST.riskF='all';ST.riskFSt='';ST.expandedPhase=null;render();}
 function setAuditTab(t){ST.auditTab=t;render();}
@@ -4885,91 +4920,166 @@ function fetchSpFileBytes(driveId,itemId){
 // Puur op bestandsnaam (via bestaande getMultiControls/detectMeta, geen AI).
 // Een document kan bij meerdere normen kandidaat zijn; een norm kan meerdere
 // kandidaat-documenten hebben. Geeft ook normen zonder enige kandidaat terug.
-function matchDocsToNorms(c){
-  var byClause={},byAnnex={};
-  (c.auditDocs||[]).forEach(function(d,di){
-    if(!d.ok||!d.text)return; // alleen succesvol uitgelezen documenten
-    // Combineer bestandsnaam-matches (precies, curated) met AI-inhoudsmatches
-    // (laag 2b) voor documenten waar de bestandsnaam niets opleverde.
-    var ctrls=getMultiControls(d.rawName||d.name).concat(d.aiControls||[]);
-    ctrls.forEach(function(ctrl){
-      if(/^A\./.test(ctrl)){
-        var k=normalizeCtrlId(ctrl);
-        if(!byAnnex[k])byAnnex[k]=[];
-        if(byAnnex[k].indexOf(di)===-1)byAnnex[k].push(di);
-      }else if(/^Clause /i.test(ctrl)){
-        var k2=normalizeCtrlId(ctrl);
-        if(!byClause[k2])byClause[k2]=[];
-        if(byClause[k2].indexOf(di)===-1)byClause[k2].push(di);
-      }
-    });
-  });
-  var clauseResults=(c.clauses||[]).map(function(cl){
-    return {id:cl.id,name:cl.name,docIdxs:byClause[cl.id]||[]};
-  });
-  var annexResults=(c.annexA||[]).filter(function(a){return a.applicable;}).map(function(a){
-    return {id:a.id,name:a.name,docIdxs:byAnnex[a.id]||[]};
-  });
-  return {clauseResults:clauseResults,annexResults:annexResults};
+// ── Stap A: documenten samenvatten (eenmalig per document) ──────────
+// Een korte, betrouwbare samenvattingstaak i.p.v. de vorige aanpak (per document
+// classificeren tegen ~120 ISO-normen \u2014 te open/onzeker gebleken in de praktijk).
+// De samenvatting wordt hergebruikt in stap B (zoeken) voor ELKE norm.
+function _aiBuildSummaryPrompt(docName,docText){
+  return 'Vat dit document samen in maximaal 2 zinnen, in het Nederlands: waar gaat het over, wat voor type document is het (beleid, procedure, register, bewijsstuk, rapport, notulen, etc.), en welk ISO 27001-onderwerp raakt het (bijv. toegangsbeveiliging, risicomanagement, incidentafhandeling, leveranciersbeheer).\n\n'+
+    'DOCUMENT: '+docName+'\n'+
+    'INHOUD:\n'+docText+'\n\n'+
+    'Antwoord ALLEEN met de samenvatting als platte tekst \u2014 geen JSON, geen opsomming, geen inleidende zin, maximaal 2 zinnen.';
 }
-
-// Documenten die op bestandsnaam GEEN enkele kandidaat opleverden en nog niet
-// eerder door de AI-matchscan zijn beoordeeld.
-function buildAiMatchQueue(c){
+function _aiParseSummaryResponse(data){
+  var txt=(data.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join(' ').trim();
+  return txt.slice(0,400);
+}
+function _aiCallForDocSummary(docName,docText){
+  return _aiRawRequestWithRetry(_aiBuildSummaryPrompt(docName,docText)).then(_aiParseSummaryResponse);
+}
+function buildSummaryQueue(c){
   var docs=c.auditDocs||[];
   var queue=[];
   docs.forEach(function(d,di){
-    if(!d.ok||!d.text)return; // niets om te scannen
-    if(d.aiControls!==undefined)return; // al eerder gescand (ook als resultaat leeg was)
-    var filenameCtrls=getMultiControls(d.rawName||d.name);
-    if(filenameCtrls.length)return; // matcht al op bestandsnaam, AI niet nodig
+    if(!d.ok||!d.text)return;
+    if(d.aiSummary!==undefined)return; // al eerder samengevat
     queue.push(di);
   });
   return queue;
 }
-
-// Orkestreert de AI-matchscan: per document (in de queue) de inhoud laten
-// beoordelen en het resultaat opslaan in auditDocs[i].aiControls. Zelfde
-// voorzichtige aanpak als laag 3: verse client-referentie bij elke schrijfactie
-// (zie toelichting bij runAiAssessment hierboven).
-function runAiDocMatching(){
+function runDocSummarization(){
   var startC=clients()[ST.sel];if(!startC)return;
-  var queue=buildAiMatchQueue(startC);
-  ST._matchQueue=queue;
-  ST._matchStarted=true;ST._matchBusy=true;ST._matchCancel=false;ST._matchDone=false;ST._matchResults=[];
+  var queue=buildSummaryQueue(startC);
+  ST._sumQueue=queue;
+  ST._sumStarted=true;ST._sumBusy=true;ST._sumCancel=false;ST._sumDone=false;ST._sumResults=[];
   _aiMinPaceMs=700;
   renderModal();
   var idx=0;
   function next(){
-    if(ST._matchCancel||idx>=ST._matchQueue.length){
-      ST._matchBusy=false;ST._matchDone=true;saveDB();renderModal();
+    if(ST._sumCancel||idx>=ST._sumQueue.length){
+      ST._sumBusy=false;ST._sumDone=true;saveDB();renderModal();
       return;
     }
-    var di=ST._matchQueue[idx];
+    var di=ST._sumQueue[idx];
     var readC=clients()[ST.sel];
     var doc=(readC&&readC.auditDocs)?readC.auditDocs[di]:null;
     if(!doc){idx++;next();return;}
-    ST._matchProg=(idx+1)+' van '+ST._matchQueue.length;
+    ST._sumProg=(idx+1)+' van '+ST._sumQueue.length;
     renderModal();
     var pace=idx===0?Promise.resolve():new Promise(function(res){setTimeout(res,_aiMinPaceMs);});
     pace.then(function(){
-      return _aiCallForDocMatch(doc.name,doc.text);
-    }).then(function(ctrls){
+      return _aiCallForDocSummary(doc.name,doc.text);
+    }).then(function(summary){
       var liveC=clients()[ST.sel];
       if(liveC&&liveC.auditDocs&&liveC.auditDocs[di]){
-        liveC.auditDocs[di].aiControls=ctrls;
+        liveC.auditDocs[di].aiSummary=summary;
       }
-      ST._matchResults.push({name:doc.name,ok:true,ctrls:ctrls});
+      ST._sumResults.push({name:doc.name,ok:true});
       saveLocalOnly();
       idx++;renderModal();next();
     }).catch(function(e){
-      ST._matchResults.push({name:doc.name,ok:false,err:e.message||'fout'});
+      ST._sumResults.push({name:doc.name,ok:false,err:e.message||'fout'});
       idx++;renderModal();next();
     });
   }
   next();
 }
-function cancelAiDocMatching(){ST._matchCancel=true;}
+function cancelDocSummarization(){ST._sumCancel=true;}
+
+// ── Stap B: per-norm zoeken tussen ALLE documenten (vervangt oude matching) ──
+// Kernverschil met de vorige aanpak: dit is een GERICHTE vergelijkingsvraag
+// ("welke van deze documenten hoort bij DEZE specifieke eis?") i.p.v. een open
+// classificatievraag per document. Dat is een taak die taalmodellen betrouwbaarder
+// uitvoeren, en dekt precies het scenario dat Collin beschreef: bij een normale
+// klant is er vrijwel altijd een relevant document, de vraag is alleen welk.
+function _aiBuildSearchPrompt(label,reqText,docSummaries){
+  var list=docSummaries.map(function(d){return '- \"'+d.name+'\": '+(d.summary||'(geen samenvatting beschikbaar)');}).join('\n');
+  return 'Je bent een ISO 27001:2022 auditor-assistent. Hieronder staan een ISO-eis en een lijst van beschikbare documenten met korte samenvatting.\n\n'+
+    'NORM: '+label+'\n'+
+    'EIS: '+reqText+'\n\n'+
+    'BESCHIKBARE DOCUMENTEN:\n'+list+'\n\n'+
+    'Welk(e) document(en) dekken deze eis het meest waarschijnlijk af? Antwoord ALLEEN met een geldige JSON-array van EXACTE documentnamen uit de lijst hierboven, zonder markdown-fences, zonder toelichting. Voorbeeld: [\"Access Control Policy\",\"Risk Register\"]\n\n'+
+    'Richtlijnen:\n'+
+    '- Kies documenten die op basis van de samenvatting relevant lijken voor DEZE specifieke eis.\n'+
+    '- Bij een normale klant is er vrijwel altijd een relevant document \u2014 kies het meest waarschijnlijke, ook als de match niet perfect is.\n'+
+    '- Geef een lege array [] alleen als ECHT geen enkel document ook maar zijdelings relevant lijkt.\n'+
+    '- Maximaal 3 documenten.';
+}
+function _aiParseSearchResponse(data,validNames){
+  var txt=(data.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('\n').trim();
+  txt=txt.replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim();
+  var parsed;
+  try{parsed=JSON.parse(txt);}catch(e){throw new Error('Kon AI-zoekantwoord niet als JSON lezen');}
+  if(!Array.isArray(parsed))throw new Error('AI-zoekantwoord is geen array');
+  var normValid=validNames.map(function(n){return n.trim().toLowerCase();});
+  return parsed.filter(function(n){return typeof n==='string'&&normValid.indexOf(n.trim().toLowerCase())!==-1;})
+    .map(function(n){var idx=normValid.indexOf(n.trim().toLowerCase());return validNames[idx];})
+    .slice(0,3);
+}
+function _aiCallForNormSearch(label,reqText,docSummaries){
+  var validNames=docSummaries.map(function(d){return d.name;});
+  return _aiRawRequestWithRetry(_aiBuildSearchPrompt(label,reqText,docSummaries)).then(function(data){
+    return _aiParseSearchResponse(data,validNames);
+  });
+}
+
+// Normen die nog geen (handmatige, niet-concept) beoordeling hebben \u2014 die
+// worden overgeslagen, zelfde bescherming als bij de beoordelingsstap zelf.
+function buildSearchQueue(c){
+  var queue=[];
+  (c.clauses||[]).forEach(function(cl){
+    if(cl.status&&!cl.aiConcept)return;
+    queue.push({type:'clause',id:cl.id,name:cl.name});
+  });
+  (c.annexA||[]).filter(function(a){return a.applicable;}).forEach(function(a){
+    if(a.status&&!a.aiConcept)return;
+    queue.push({type:'annex',id:a.id,name:a.name});
+  });
+  return queue;
+}
+
+function runNormSearch(){
+  var startC=clients()[ST.sel];if(!startC)return;
+  var docs=(startC.auditDocs||[]).filter(function(d){return d.ok&&d.text;});
+  if(!docs.length)return;
+  var docSummaries=docs.map(function(d){return {name:d.name,summary:d.aiSummary||''};});
+  var queue=buildSearchQueue(startC);
+  ST._searchQueue=queue;
+  ST._searchStarted=true;ST._searchBusy=true;ST._searchCancel=false;ST._searchDone=false;ST._searchResults=[];
+  _aiMinPaceMs=700;
+  renderModal();
+  var idx=0;
+  function next(){
+    if(ST._searchCancel||idx>=ST._searchQueue.length){
+      ST._searchBusy=false;ST._searchDone=true;saveDB();renderModal();
+      return;
+    }
+    var q=ST._searchQueue[idx];
+    ST._searchProg=(idx+1)+' van '+ST._searchQueue.length;
+    renderModal();
+    var label=q.type==='clause'?('Clausule '+q.id):('Annex A control '+q.id);
+    var reqText=_aiReqTextFor(q.type,q.id);
+    var pace=idx===0?Promise.resolve():new Promise(function(res){setTimeout(res,_aiMinPaceMs);});
+    pace.then(function(){
+      return _aiCallForNormSearch(label,reqText,docSummaries);
+    }).then(function(foundNames){
+      var liveC=clients()[ST.sel];
+      if(liveC){
+        if(!liveC._normMatch)liveC._normMatch={clauses:{},annex:{}};
+        var bucket=q.type==='clause'?liveC._normMatch.clauses:liveC._normMatch.annex;
+        bucket[q.id]=foundNames;
+      }
+      ST._searchResults.push({type:q.type,id:q.id,name:q.name,ok:true,found:foundNames});
+      saveLocalOnly();
+      idx++;renderModal();next();
+    }).catch(function(e){
+      ST._searchResults.push({type:q.type,id:q.id,name:q.name,ok:false,err:e.message||'fout'});
+      idx++;renderModal();next();
+    });
+  }
+  next();
+}
+function cancelNormSearch(){ST._searchCancel=true;}
 
 // ── Laag 3: AI-concept per norm ──────────────────────────────────────
 // Alleen normen met minstens 1 kandidaat-document (uit laag 2) worden aan de
@@ -5138,55 +5248,26 @@ function _aiCallForNorm(type,id,name,reqText,docText){
   return _aiRawRequestWithRetry(prompt).then(_aiParseResponse);
 }
 
-// ── AI-ondersteunde document\u2192norm matching (laag 2b) ────────────────────
-// Voor documenten die op bestandsnaam GEEN enkele kandidaat-norm opleverden:
-// laat de AI de INHOUD van het document beoordelen en teruggeven welke
-// clausules/Annex A-controls het waarschijnlijk afdekt. Dit draait bewust
-// V\u00d3\u00d3R de inhoudelijke beoordeling (laag 3) \u2014 eerst koppelen, dan pas oordelen \u2014
-// zodat laag 3 nooit een document tegen een niet-verwante norm hoeft te leggen.
-function _aiBuildMatchPrompt(docName,docText){
-  return 'Je bent een ISO 27001:2022 auditor-assistent. Bepaal op basis van de INHOUD welke ISO 27001:2022 clausules (4-10) en/of Annex A-controls dit document het meest waarschijnlijk afdekt.\n\n'+
-    'DOCUMENT: '+docName+'\n'+
-    'INHOUD:\n'+docText+'\n\n'+
-    'Antwoord ALLEEN met een geldige JSON-array van ISO-referenties, zonder markdown-fences, zonder toelichting erbuiten. Voorbeeld: [\"Clause 6.1.2\",\"A.5.15\",\"A.8.3\"]\n\n'+
-    'Richtlijnen:\n'+
-    '- Clausules in het formaat \"Clause X.X\" (bijv. \"Clause 5.1\").\n'+
-    '- Annex A-controls in het formaat \"A.X.X\" (bijv. \"A.5.15\").\n'+
-    '- Geef alleen normen waarvan dit document daadwerkelijk het beleid, de procedure, of het bewijs lijkt te zijn \u2014 niet losjes gerelateerd of toevallig een overlappend onderwerp.\n'+
-    '- Maximaal 5 normen. Geef een lege array [] als er geen duidelijke match is.';
-}
-
-function _aiParseMatchResponse(data){
-  var txt=(data.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('\n').trim();
-  txt=txt.replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim();
-  var parsed;
-  try{parsed=JSON.parse(txt);}catch(e){throw new Error('Kon AI-matchantwoord niet als JSON lezen');}
-  if(!Array.isArray(parsed))throw new Error('AI-matchantwoord is geen array');
-  var VALID_RE=/^(Clause \d+(\.\d+)*|A\.\d+(\.\d+)*)$/;
-  return parsed.filter(function(x){return typeof x==='string'&&VALID_RE.test(x);}).slice(0,5);
-}
-
-function _aiCallForDocMatch(docName,docText){
-  var prompt=_aiBuildMatchPrompt(docName,docText);
-  return _aiRawRequestWithRetry(prompt).then(_aiParseMatchResponse);
-}
-
 // Bouwt de queue: alleen normen met >=1 kandidaat-document, exclusief normen
 // die al handmatig (niet als AI-concept) beoordeeld zijn.
 function buildAiQueue(c){
-  var m=matchDocsToNorms(c);
+  var nm=c._normMatch||{clauses:{},annex:{}};
+  var docsByName={};
+  (c.auditDocs||[]).forEach(function(d,di){docsByName[d.name]=di;});
   var queue=[],skipped=0;
-  m.clauseResults.forEach(function(r){
-    if(!r.docIdxs.length)return;
-    var item=c.clauses[c.clauses.findIndex(function(x){return x.id===r.id;})];
-    if(item&&item.status&&!item.aiConcept){skipped++;return;}
-    queue.push({type:'clause',id:r.id,name:r.name,docIdxs:r.docIdxs});
+  (c.clauses||[]).forEach(function(cl){
+    var foundNames=(nm.clauses||{})[cl.id]||[];
+    var docIdxs=foundNames.map(function(n){return docsByName[n];}).filter(function(i){return i!==undefined;});
+    if(!docIdxs.length)return;
+    if(cl.status&&!cl.aiConcept){skipped++;return;}
+    queue.push({type:'clause',id:cl.id,name:cl.name,docIdxs:docIdxs});
   });
-  m.annexResults.forEach(function(r){
-    if(!r.docIdxs.length)return;
-    var item=c.annexA[c.annexA.findIndex(function(x){return x.id===r.id;})];
-    if(item&&item.status&&!item.aiConcept){skipped++;return;}
-    queue.push({type:'annex',id:r.id,name:r.name,docIdxs:r.docIdxs});
+  (c.annexA||[]).filter(function(a){return a.applicable;}).forEach(function(a){
+    var foundNames=(nm.annex||{})[a.id]||[];
+    var docIdxs=foundNames.map(function(n){return docsByName[n];}).filter(function(i){return i!==undefined;});
+    if(!docIdxs.length)return;
+    if(a.status&&!a.aiConcept){skipped++;return;}
+    queue.push({type:'annex',id:a.id,name:a.name,docIdxs:docIdxs});
   });
   return {queue:queue,skipped:skipped};
 }
