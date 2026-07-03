@@ -4960,7 +4960,7 @@ function runAiDocMatching(){
         liveC.auditDocs[di].aiControls=ctrls;
       }
       ST._matchResults.push({name:doc.name,ok:true,ctrls:ctrls});
-      saveDB();
+      saveLocalOnly();
       idx++;renderModal();next();
     }).catch(function(e){
       ST._matchResults.push({name:doc.name,ok:false,err:e.message||'fout'});
@@ -5246,7 +5246,7 @@ function runAiAssessment(){
         }
       }
       ST._aiResults.push({type:q.type,id:q.id,name:q.name,ok:true,status:res.status});
-      saveDB();
+      saveLocalOnly();
       idx++;renderModal();next();
     }).catch(function(e){
       ST._aiResults.push({type:q.type,id:q.id,name:q.name,ok:false,err:e.message||'fout'});
