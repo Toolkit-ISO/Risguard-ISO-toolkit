@@ -4992,34 +4992,47 @@ function cancelDocSummarization(){ST._sumCancel=true;}
 // classificatievraag per document. Dat is een taak die taalmodellen betrouwbaarder
 // uitvoeren, en dekt precies het scenario dat Collin beschreef: bij een normale
 // klant is er vrijwel altijd een relevant document, de vraag is alleen welk.
-function _aiBuildSearchPrompt(label,reqText,docSummaries){
+// Aantal normen per zoek-aanroep. Hogere waarde = minder AI-aanroepen = veel
+// sneller, zonder verlies van kwaliteit (dit is een classificatietaak tegen
+// een vaste, korte lijst met documentsamenvattingen \u2014 geen zware inhoudsanalyse).
+var _SEARCH_BATCH_SIZE=8;
+
+function _aiBuildBatchSearchPrompt(batchItems,docSummaries){
   var list=docSummaries.map(function(d){return '- \"'+d.name+'\": '+(d.summary||'(geen samenvatting beschikbaar)');}).join('\n');
-  return 'Je bent een ISO 27001:2022 auditor-assistent. Hieronder staan een ISO-eis en een lijst van beschikbare documenten met korte samenvatting.\n\n'+
-    'NORM: '+label+'\n'+
-    'EIS: '+reqText+'\n\n'+
+  var normsBlock=batchItems.map(function(it){return '### '+it.label+'\nEIS: '+it.reqText;}).join('\n\n');
+  return 'Je bent een ISO 27001:2022 auditor-assistent. Hieronder staan meerdere ISO-eisen en een lijst van beschikbare documenten met korte samenvatting.\n\n'+
     'BESCHIKBARE DOCUMENTEN:\n'+list+'\n\n'+
-    'Welk(e) document(en) dekken deze eis het meest waarschijnlijk af? Antwoord ALLEEN met een geldige JSON-array van EXACTE documentnamen uit de lijst hierboven, zonder markdown-fences, zonder toelichting. Voorbeeld: [\"Access Control Policy\",\"Risk Register\"]\n\n'+
+    'NORMEN OM TE KOPPELEN:\n'+normsBlock+'\n\n'+
+    'Bepaal voor ELKE norm hierboven welk(e) document(en) deze het meest waarschijnlijk afdekken. Antwoord ALLEEN met een geldig JSON-object, zonder markdown-fences, zonder toelichting: de sleutels zijn EXACT de normlabels hierboven (bijv. \"Clause 4.1\", \"A.5.1\"), de waarden zijn arrays van EXACTE documentnamen uit de lijst. Voorbeeld:\n'+
+    '{\"Clause 4.1\":[\"Scope Document\"],\"A.5.1\":[],\"A.5.15\":[\"Access Control Policy\",\"IAM Procedure\"]}\n\n'+
     'Richtlijnen:\n'+
-    '- Kies documenten die op basis van de samenvatting relevant lijken voor DEZE specifieke eis.\n'+
+    '- Kies documenten die op basis van de samenvatting relevant lijken voor DIE specifieke eis.\n'+
     '- Bij een normale klant is er vrijwel altijd een relevant document \u2014 kies het meest waarschijnlijke, ook als de match niet perfect is.\n'+
     '- Geef een lege array [] alleen als ECHT geen enkel document ook maar zijdelings relevant lijkt.\n'+
-    '- Maximaal 3 documenten.';
+    '- Maximaal 3 documenten per norm.\n'+
+    '- Geef een sleutel voor ELKE norm hierboven, ook als de array leeg is.';
 }
-function _aiParseSearchResponse(data,validNames){
+function _aiParseBatchSearchResponse(data,batchItems,validNames){
   var txt=(data.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('\n').trim();
   txt=txt.replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim();
   var parsed;
   try{parsed=JSON.parse(txt);}catch(e){throw new Error('Kon AI-zoekantwoord niet als JSON lezen');}
-  if(!Array.isArray(parsed))throw new Error('AI-zoekantwoord is geen array');
+  if(typeof parsed!=='object'||Array.isArray(parsed)||!parsed)throw new Error('AI-zoekantwoord is geen object');
   var normValid=validNames.map(function(n){return n.trim().toLowerCase();});
-  return parsed.filter(function(n){return typeof n==='string'&&normValid.indexOf(n.trim().toLowerCase())!==-1;})
-    .map(function(n){var idx=normValid.indexOf(n.trim().toLowerCase());return validNames[idx];})
-    .slice(0,3);
+  var out={};
+  batchItems.forEach(function(it){
+    var raw=parsed[it.label];
+    if(!Array.isArray(raw))raw=[];
+    out[it.label]=raw.filter(function(n){return typeof n==='string'&&normValid.indexOf(n.trim().toLowerCase())!==-1;})
+      .map(function(n){var idx=normValid.indexOf(n.trim().toLowerCase());return validNames[idx];})
+      .slice(0,3);
+  });
+  return out;
 }
-function _aiCallForNormSearch(label,reqText,docSummaries){
+function _aiCallForBatchSearch(batchItems,docSummaries){
   var validNames=docSummaries.map(function(d){return d.name;});
-  return _aiRawRequestWithRetry(_aiBuildSearchPrompt(label,reqText,docSummaries)).then(function(data){
-    return _aiParseSearchResponse(data,validNames);
+  return _aiRawRequestWithRetry(_aiBuildBatchSearchPrompt(batchItems,docSummaries)).then(function(data){
+    return _aiParseBatchSearchResponse(data,batchItems,validNames);
   });
 }
 
@@ -5043,38 +5056,46 @@ function runNormSearch(){
   var docs=(startC.auditDocs||[]).filter(function(d){return d.ok&&d.text;});
   if(!docs.length)return;
   var docSummaries=docs.map(function(d){return {name:d.name,summary:d.aiSummary||''};});
-  var queue=buildSearchQueue(startC);
-  ST._searchQueue=queue;
+  var queue=buildSearchQueue(startC).map(function(q){
+    return{type:q.type,id:q.id,name:q.name,label:q.type==='clause'?('Clause '+q.id):('A.'+q.id),reqText:_aiReqTextFor(q.type,q.id)};
+  });
+  var batches=[];
+  for(var i=0;i<queue.length;i+=_SEARCH_BATCH_SIZE){batches.push(queue.slice(i,i+_SEARCH_BATCH_SIZE));}
+  ST._searchQueue=queue; // totaalaantal normen, voor voortgangsweergave
   ST._searchStarted=true;ST._searchBusy=true;ST._searchCancel=false;ST._searchDone=false;ST._searchResults=[];
   _aiMinPaceMs=700;
   renderModal();
-  var idx=0;
+  var bi=0;
   function next(){
-    if(ST._searchCancel||idx>=ST._searchQueue.length){
+    if(ST._searchCancel||bi>=batches.length){
       ST._searchBusy=false;ST._searchDone=true;saveDB();renderModal();
       return;
     }
-    var q=ST._searchQueue[idx];
-    ST._searchProg=(idx+1)+' van '+ST._searchQueue.length;
+    var batch=batches[bi];
+    ST._searchProg='batch '+(bi+1)+' van '+batches.length+' \u2014 '+ST._searchResults.length+' van '+queue.length+' normen verwerkt';
     renderModal();
-    var label=q.type==='clause'?('Clausule '+q.id):('Annex A control '+q.id);
-    var reqText=_aiReqTextFor(q.type,q.id);
-    var pace=idx===0?Promise.resolve():new Promise(function(res){setTimeout(res,_aiMinPaceMs);});
+    var pace=bi===0?Promise.resolve():new Promise(function(res){setTimeout(res,_aiMinPaceMs);});
     pace.then(function(){
-      return _aiCallForNormSearch(label,reqText,docSummaries);
-    }).then(function(foundNames){
+      return _aiCallForBatchSearch(batch,docSummaries);
+    }).then(function(resultMap){
       var liveC=clients()[ST.sel];
-      if(liveC){
-        if(!liveC._normMatch)liveC._normMatch={clauses:{},annex:{}};
-        var bucket=q.type==='clause'?liveC._normMatch.clauses:liveC._normMatch.annex;
-        bucket[q.id]=foundNames;
-      }
-      ST._searchResults.push({type:q.type,id:q.id,name:q.name,ok:true,found:foundNames});
+      batch.forEach(function(it){
+        var foundNames=resultMap[it.label]||[];
+        if(liveC){
+          if(!liveC._normMatch)liveC._normMatch={clauses:{},annex:{}};
+          var bucket=it.type==='clause'?liveC._normMatch.clauses:liveC._normMatch.annex;
+          bucket[it.id]=foundNames;
+        }
+        ST._searchResults.push({type:it.type,id:it.id,name:it.name,ok:true,found:foundNames});
+      });
       saveLocalOnly();
-      idx++;renderModal();next();
+      bi++;renderModal();next();
     }).catch(function(e){
-      ST._searchResults.push({type:q.type,id:q.id,name:q.name,ok:false,err:e.message||'fout'});
-      idx++;renderModal();next();
+      // Hele batch als fout markeren; individuele normen blijven gewoon "geen kandidaat"
+      batch.forEach(function(it){
+        ST._searchResults.push({type:it.type,id:it.id,name:it.name,ok:false,err:e.message||'fout'});
+      });
+      bi++;renderModal();next();
     });
   }
   next();
@@ -5109,17 +5130,19 @@ function _aiCombinedText(docIdxs,docsRef){
 
 function _aiBuildPrompt(type,id,name,reqText,docText){
   var label=type==='clause'?('Clausule '+id):('Annex A control '+id);
-  return 'Je bent een ISO 27001:2022 auditor-assistent. Beoordeel of het aangeleverde documentbewijs de onderstaande norm-eis afdekt.\n\n'+
+  return 'Je bent een ervaren, pragmatische ISO 27001:2022-auditor. Beoordeel of het aangeleverde documentbewijs de onderstaande norm-eis afdekt \u2014 zoals een ervaren auditor dat in de praktijk zou doen, niet als een letterlijke woord-voor-woord checklist.\n\n'+
     'NORM: '+label+' \u2014 '+name+'\n'+
     'EIS (ISO 27001:2022): '+reqText+'\n\n'+
     'DOCUMENTBEWIJS (tekst uit aangeleverde document(en)):\n'+docText+'\n\n'+
     'Antwoord ALLEEN met geldige JSON, zonder markdown-fences, zonder toelichting erbuiten, in exact dit formaat:\n'+
     '{"status":"compliant|ofi|minor|major","finding":"...","improvement":"..."}\n\n'+
-    'Richtlijnen:\n'+
-    '- status "compliant": het bewijs dekt de eis volledig af.\n'+
-    '- status "ofi" (opportunity for improvement): het bewijs dekt de eis grotendeels af, maar er is ruimte voor verbetering.\n'+
-    '- status "minor": er is een duidelijke maar beperkte tekortkoming t.o.v. de eis.\n'+
-    '- status "major": het bewijs dekt de eis niet of nauwelijks af.\n'+
+    'BELANGRIJK \u2014 kalibratie van de statussen. Bij een redelijk volwassen organisatie is de MEERDERHEID van beoordelingen compliant of ofi; major is UITZONDERLIJK, niet de standaarduitkomst bij twijfel:\n'+
+    '- "compliant": de KERN van de eis is aantoonbaar geregeld. Kleine onvolkomenheden, iets minder detail dan ideaal, of een andere formulering dan de ISO-tekst zijn GEEN reden om dit af te keuren \u2014 zolang de intentie en praktijk van de eis duidelijk terug te vinden zijn.\n'+
+    '- "ofi" (opportunity for improvement): de eis is gedekt en functioneert, maar er is een concrete, aanwijsbare verbetermogelijkheid.\n'+
+    '- "minor": een re\u00eble tekortkoming \u2014 een deel van de eis ontbreekt of is onduidelijk \u2014 maar de kern van de control functioneert wel.\n'+
+    '- "major": gebruik dit ALLEEN als het document de eis in feite niet behandelt, structureel ontbreekt, of een fundamentele tegenstrijdigheid bevat met wat de eis vraagt. Een document dat over het juiste onderwerp gaat maar niet perfect of volledig is, is GEEN major \u2014 dat is minor of ofi.\n'+
+    '- Twijfel je tussen twee statussen? Kies de mildere, tenzij er een concrete, materi\u00eble reden is voor de strengere.\n\n'+
+    'Overige richtlijnen:\n'+
     '- finding: maximaal 2 zinnen, in het Nederlands, feitelijk en specifiek \u2014 verwijs naar wat het document wel of niet regelt.\n'+
     '- improvement: maximaal 1 zin, concrete aanbeveling. Laat leeg ("") als status compliant is en er niets te verbeteren is.';
 }
